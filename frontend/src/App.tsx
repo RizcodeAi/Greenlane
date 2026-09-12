@@ -57,13 +57,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
       <BrowserRouter>
         <ErrorBoundary>
           <AppContent />
         </ErrorBoundary>
       </BrowserRouter>
-    </AuthProvider>
   );
 }
 

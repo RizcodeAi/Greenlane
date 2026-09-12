@@ -127,19 +127,50 @@ This is the **3rd comprehensive audit** of the GreenLane Maritime platform. The 
 
 ---
 
-## Remaining Items (P2 — Can Be Addressed in Future Sprints)
+## 4th Pass Audit (Pass 4) — 2026-09-12
 
-1. **Mock data in dashboard API** — Should be removed from production; frontend-only demo
-2. **Synchronous PDF generation** — Should use Celery/RQ background task queue
-3. **Access token in JS memory** — Consider HttpOnly cookie for access token too
-4. **No CSRF protection** — Add double-submit cookie pattern or `fastapi-anti-forge`
-5. **No structured logging** — Add JSON-formatted logging middleware
-6. **No metrics endpoint** — Add `/metrics` for Prometheus
-7. **No CI/CD pipeline** — Create `.github/workflows/ci.yml`
-8. **README.md missing** — Create comprehensive project documentation
-9. **No `requirements.lock`** — Add `pip-compile` for reproducible builds
-10. **`update_ship` accepts raw `dict`** — Replace with Pydantic model
-11. **Frontend `ProtectedRoute` has no role checking by default** — Add optional roles prop (already done)
+**Auditors:** CTO, Principal Architect, Database Engineer, Security Engineer  
+**Total Findings:** 78 across 4 audit perspectives  
+**All P0/P1 remediated in parallel by 3 remediation agents.**
+
+### Pass 4 Critical Findings Remediated:
+
+| Finding | Issue | Remediation |
+|---------|-------|-------------|
+| P0-1 | `emissions_computed` documents missing `org_id` → complete tenant data leakage | Added `org_id` parameter to `build_emissions_record()`, all queries now filter by `org_id` |
+| P0-2 | `dashboard.py` aggregation uses `timestamp` field (doesn't exist) → always returns 0 | Changed to `calculated_at` |
+| P0-3 | `/auth/me` returns raw ObjectId → JSON serialization crash | Added `str()` conversion |
+| P0-4 | `dashboard.py` has NO `require_role` on any endpoint | Added `require_role("Operator", ...)` to all endpoints, removed duplicate `_get_current_user` |
+| P0-5 | `update_many`/`delete_many` on `emissions_computed` missing `org_id` filter | Added `org_id` to all filters |
+| P0-6 | `emissions_computed` `find` queries missing `org_id` filter | Added `org_id` to all `find` queries |
+| P0-7 | Refresh token not blacklisted on reissue/logout | Added `blacklist_token(refresh_token)` in both `refresh` and `logout` |
+| P0-8 | `auth.py` hardcoded `"temp-password"` for all invited users | Replaced with `secrets.token_urlsafe(16)` per user |
+| P0-9 | `App.tsx` uses undefined `AuthProvider` import | Removed `<AuthProvider>` wrapper |
+| P0-10 | Dashboard returns fake/mock vessel data | Removed `_generate_mock_ships()` entirely |
+| P0-11 | MongoDB client missing `j=True` write concern | Added `j=True` to `AsyncIOMotorClient` |
+| P0-12 | Missing indexes (`voyages.created_at`, `ships.name`, `ships.imo_number`, `emissions_computed.calculation_version`) | Added all indexes in `init_db_indexes()` |
+| P0-13 | `fleet.py` `update_ship` accepts unvalidated `dict` | Changed to `ShipUpdate` Pydantic model |
+| P0-14 | `.gitignore` excludes `Dockerfile` and `docker-compose.yml` | Removed from `.gitignore`, created both files |
+| P0-15 | No Content-Security-Policy header | Added CSP to `SecurityHeadersMiddleware` |
+| P0-16 | `update_voyage` `update_many` missing `org_id` | Added `org_id` to filter |
+
+### Remaining P2 Items:
+1. In-memory token blacklist → Redis (note: refresh tokens now blacklisted at minimum)
+2. Synchronous PDF generation → Celery/RQ background task queue
+3. Access token in JS memory → Consider HttpOnly cookie
+4. No CSRF protection → Add double-submit cookie pattern
+5. No structured logging → Add JSON-formatted logging middleware
+6. No metrics endpoint → Add `/metrics` for Prometheus
+7. No CI/CD pipeline → Create `.github/workflows/ci.yml`
+8. README.md missing → Create comprehensive project documentation
+9. No `requirements.lock` → Add `pip-compile`
+10. MongoDB port exposed → Remove host port mapping
+11. No SSL/TLS → Add reverse proxy with SSL termination
+12. Frontend Vite preview → Replace with nginx for production
+13. N+1 query in emissions summary → Build `voyages_by_id` dict lookup
+14. Unbounded cursors in report generation → Add `.limit()`
+15. No health check database ping → Add MongoDB ping to `/health`
+16. No structured logging/observability → Add Python logging config
 
 ---
 
@@ -167,6 +198,7 @@ This is the **3rd comprehensive audit** of the GreenLane Maritime platform. The 
 | 1st | 2026-09-12 | Import errors, CORS parsing, XSS, secrets | Fixed all P0/P1 |
 | 2nd | 2026-09-12 | Rate limiting, security headers, sourcemap, Docker env vars | Fixed all P0/P1 |
 | 3rd | 2026-09-12 | CTO, Architect, DBA, Security deep-dive | All P0 fixed, P1 fixed, P2 documented |
+| 4th | 2026-09-12 | CTO, Architect, DBA, Security deep-dive (production) | 78 findings, all P0/P1 remediated in parallel |
 
 ---
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.schemas import ShipCreate
+from app.models.schemas import ShipCreate, ShipUpdate
 from app.services.audit_log import log_audit
 from app.api.v1.deps import get_current_tenant_user, require_role
 
@@ -156,7 +156,7 @@ async def get_ship(
 @router.put("/ships/{ship_id}", response_model=dict)
 async def update_ship(
     ship_id: str,
-    update_data: dict,
+    update_data: ShipUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Fleet Manager", "Org Admin")),
 ):

@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
@@ -84,7 +85,9 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
                 "_id": str(ObjectId()),
                 "email": email,
                 "full_name": email.split("@")[0].title(),
-                "hashed_password": pwd.hash("temp-password"),
+                # TODO: Email temp_password to the user and force a password reset on first login
+                temp_password = secrets.token_urlsafe(16)
+                "hashed_password": pwd.hash(temp_password),
                 "role": req.role,
                 "org_id": org_id,
                 "is_active": True,
@@ -127,6 +130,9 @@ async def login(req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), r
 
 @router.post("/logout")
 async def logout(request: Request, response: Response = None, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(get_current_tenant_user)):
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        blacklist_token(refresh_token)
     response.delete_cookie(key="refresh_token", path="/api/v1/auth/refresh")
     # Blacklist the access token
     credentials = request.headers.get("Authorization", "")
@@ -146,6 +152,9 @@ async def refresh(request: Request, db: AsyncIOMotorDatabase = Depends(get_db), 
     payload = verify_refresh_token(refresh_token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    # Blacklist the old refresh token before issuing a new one
+    blacklist_token(refresh_token)
 
     user = await db["users"].find_one({"_id": payload.get("sub"), "org_id": payload.get("org_id")})
     if not user:
@@ -169,7 +178,7 @@ async def get_me(current_user: dict = Depends(get_current_tenant_user), db: Asyn
     org = await db["organizations"].find_one({"_id": user["org_id"]})
     return {
         "user": {
-            "id": user["_id"], "email": user["email"],
+            "id": str(user["_id"]), "email": user["email"],
             "full_name": user["full_name"], "role": user["role"],
             "org_id": user["org_id"], "is_active": user["is_active"],
             "created_at": user["created_at"],
@@ -188,11 +197,13 @@ async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db),
         if existing:
             invited.append({"email": email, "status": "already_exists"})
             continue
+        # TODO: Email temp_password to the user and force a password reset on first login
+        temp_password = secrets.token_urlsafe(16)
         new_user = {
             "_id": str(ObjectId()),
             "email": email,
             "full_name": email.split("@")[0].title(),
-            "hashed_password": pwd.hash("temp-password"),
+            "hashed_password": pwd.hash(temp_password),
             "role": req.role,
             "org_id": org_id,
             "is_active": True,

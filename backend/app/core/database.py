@@ -10,6 +10,7 @@ client = AsyncIOMotorClient(
     socketTimeoutMS=30000,
     serverSelectionTimeoutMS=10000,
     w="majority",
+    j=True,
     readPreference="primaryPreferred",
 )
 db = client[settings.database_name]
@@ -47,6 +48,10 @@ async def init_db_indexes(db):
     await db["audit_logs"].create_index([("org_id", 1), ("timestamp", 1)])
     await db["audit_logs"].create_index("timestamp", expireAfterSeconds=31536000)
 
+    # ships: single-field indexes for regex search
+    await db["ships"].create_index("name")
+    await db["ships"].create_index("imo_number")
+
     # ships: additional indexes
     await db["ships"].create_index([("org_id", 1), ("status", 1)])
     await db["ships"].create_index([("org_id", 1), ("compliance_status", 1)])
@@ -56,6 +61,13 @@ async def init_db_indexes(db):
     await db["emissions_computed"].create_index([("org_id", 1), ("voyage_id", 1)])
     await db["emissions_computed"].create_index([("org_id", 1), ("generated_at", -1)])
     await db["emissions_computed"].create_index([("voyage_id", 1), ("is_current", 1)], unique=True, partialFilterExpression={"is_current": True})
+
+    # voyages: indexes for created_at (sort) and asset_id (query)
+    await db["voyages"].create_index("created_at")
+    await db["voyages"].create_index("asset_id")
+
+    # emissions_computed: index for calculation_version (sort)
+    await db["emissions_computed"].create_index("calculation_version")
 
     # users: index for org_id
     await db["users"].create_index([("org_id", 1)])

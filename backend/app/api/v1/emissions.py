@@ -67,6 +67,7 @@ async def create_voyage(
     # Compute and store emissions (version 1, is_current=True)
     emissions_record = build_emissions_record(
         voyage_id=voyage_id,
+        org_id=org_id,
         asset_id=asset_id,
         fuel_type=fuel_type,
         fuel_consumed_mt=fuel_consumed_mt,
@@ -146,6 +147,7 @@ async def list_voyages(
         emissions_cursor = db["emissions_computed"].find({
             "voyage_id": {"$in": voyage_ids},
             "is_current": True,
+            "org_id": org_id,
         })
         emissions_list = await emissions_cursor.to_list(length=1000)
         for e in emissions_list:
@@ -205,7 +207,7 @@ async def update_voyage(
 
     # Mark previous emissions as not current
     await db["emissions_computed"].update_many(
-        {"voyage_id": voyage_id},
+        {"voyage_id": voyage_id, "org_id": org_id},
         {"$set": {"is_current": False}},
     )
 
@@ -240,6 +242,7 @@ async def update_voyage(
 
     new_emissions_record = build_emissions_record(
         voyage_id=voyage_id,
+        org_id=org_id,
         asset_id=updated_voyage["asset_id"],
         fuel_type=fuel_type,
         fuel_consumed_mt=fuel_consumed_mt,
@@ -278,7 +281,7 @@ async def delete_voyage(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
     await db["voyages"].delete_one({"_id": ObjectId(voyage_id)})
-    await db["emissions_computed"].delete_many({"voyage_id": voyage_id})
+    await db["emissions_computed"].delete_many({"voyage_id": voyage_id, "org_id": org_id})
 
     await log_audit(
         db, org_id, current_user["user"]["_id"],
@@ -334,6 +337,7 @@ async def get_emissions_summary(
     emissions_cursor = db["emissions_computed"].find({
         "voyage_id": {"$in": voyage_ids},
         "is_current": True,
+        "org_id": org_id,
     })
     emissions_records = []
     async for e in emissions_cursor:
@@ -410,6 +414,7 @@ async def get_emissions_summary(
 
 def build_emissions_record(
     voyage_id: str,
+    org_id: str,
     asset_id: str,
     fuel_type: str,
     fuel_consumed_mt: float,
@@ -424,6 +429,7 @@ def build_emissions_record(
     return {
         "id": str(ObjectId()),
         "asset_id": asset_id,
+        "org_id": org_id,
         "voyage_id": voyage_id,
         "calculation_version": calculation_version,
         "methodology": "IMO",
