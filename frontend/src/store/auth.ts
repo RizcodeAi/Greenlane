@@ -6,35 +6,29 @@ export const useAuth = create<AuthState>()((set) => ({
   user: null,
   organization: null,
   isAuthenticated: false,
-  accessToken: null,
 
-  login: (accessToken: string, user: User, organization: Organization) => {
-    set({ user, organization, isAuthenticated: true, accessToken });
+  login: (user: User, organization: Organization) => {
+    set({ user, organization, isAuthenticated: true });
   },
 
   logout: async () => {
     try { await apiLogout(); } catch {}
-    set({ user: null, organization: null, isAuthenticated: false, accessToken: null });
+    set({ user: null, organization: null, isAuthenticated: false });
   },
 
   fetchUser: async () => {
     try {
       const res = await getMe();
-      const storedToken = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      set({ user: res.data.user, organization: res.data.organization, isAuthenticated: true, accessToken: storedToken });
+      set({ user: res.data.user, organization: res.data.organization, isAuthenticated: true });
     } catch { set({ isAuthenticated: false }); }
-  },
-
-  setAccessToken: (token: string | null) => {
-    set({ accessToken: token });
   },
 
   refreshSession: async () => {
     try {
-      const newToken = await apiRefreshToken();
-      return newToken;
+      await apiRefreshToken();
+      return 'ok';
     } catch {
-      set({ user: null, organization: null, isAuthenticated: false, accessToken: null });
+      set({ user: null, organization: null, isAuthenticated: false });
       return null;
     }
   },

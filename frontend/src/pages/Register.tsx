@@ -37,7 +37,7 @@ export default function Register() {
       });
       const { access_token } = res.data;
       const userRes = await getMe();
-      authLogin(access_token, userRes.data.user, userRes.data.organization);
+      authLogin(userRes.data.user, userRes.data.organization);
       navigate('/dashboard');
     } catch {
       setError('Registration failed. Please try again.');

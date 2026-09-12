@@ -3,6 +3,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import redis.asyncio as aioredis
+from fastapi import Response
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -23,7 +24,6 @@ async def get_redis() -> aioredis.Redis:
 async def blacklist_token(token: str) -> None:
     """Add a token to the Redis blacklist with TTL."""
     redis = await get_redis()
-    # Decode the token to get the expiry and set TTL accordingly
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
         exp = payload.get("exp")
@@ -58,6 +58,24 @@ async def verify_refresh_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def set_access_token_cookie(response: Response, token: str, max_age: int = 900) -> None:
+    """Set the access token as an httpOnly, Secure, SameSite=Strict cookie."""
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=settings.environment != "development",
+        samesite="strict",
+        max_age=max_age,
+        path="/",
+    )
+
+
+def clear_access_token_cookie(response: Response) -> None:
+    """Clear the access_token cookie."""
+    response.delete_cookie(key="access_token", path="/")
 
 
 def hash_password(password: str) -> str:

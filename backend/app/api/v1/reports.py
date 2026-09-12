@@ -14,19 +14,20 @@ from app.services.audit_log import log_audit
 from app.services.report_generator import generate_imo_dcs_report, get_all_report_files
 from app.models.schemas import ReportCreate, ReportStatusUpdate
 from app.api.v1.deps import get_current_tenant_user, require_role
+from app.tasks.report_tasks import generate_report_task
 
 router = APIRouter()
 
 VALID_STATUSES = {"Draft", "Generated", "Submitted"}
 
 
-@router.post("/reports/generate", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/reports/generate", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
 async def generate_report(
     request: ReportCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Compliance Officer", "Org Admin")),
 ):
-    """Generate an IMO DCS Annual Compliance Report for the specified year."""
+    """Queue an IMO DCS Annual Compliance Report for background generation."""
     org_id = current_user["org_id"]
     year = request.year
 
@@ -65,13 +66,14 @@ async def generate_report(
         async for doc in emissions_cursor:
             emissions_records.append(doc)
 
-    # Generate the PDF
+    # Determine org name
     org_name = current_user["user"].get("full_name", org_id)
     org_doc = await db["organizations"].find_one({"_id": org_id})
     if org_doc and org_doc.get("name"):
         org_name = org_doc["name"]
 
-    pdf_path = generate_imo_dcs_report(
+    # Queue the report generation as a Celery task
+    task = generate_report_task.delay(
         org_id=org_id,
         org_name=org_name,
         year=year,
@@ -79,17 +81,17 @@ async def generate_report(
         emissions_records=emissions_records,
         voyages=voyages,
     )
+    task_id = task.id
 
-    # Create report document
-    report_id = pdf_path.split("/")[-1].replace(".pdf", "")
+    # Create a preliminary report document with task_id and queued status
     report_doc = {
-        "id": report_id,
+        "id": task_id,
         "org_id": org_id,
         "year": year,
-        "status": "Generated",
+        "status": "Queued",
         "report_type": "IMO DCS Annual",
         "generated_at": datetime.now(timezone.utc),
-        "pdf_url": f"/api/v1/reports/{report_id}/download",
+        "task_id": task_id,
         "fleet_summary": {
             "total_ships": len(ships),
             "total_fuel_consumed_mt": sum(
@@ -108,18 +110,14 @@ async def generate_report(
 
     await log_audit(
         db, org_id, current_user["user"]["_id"],
-        "generate", "report", report_id,
+        "generate", "report", task_id,
         {"year": year, "total_ships": len(ships), "total_co2": report_doc["fleet_summary"]["total_co2_emissions_tonnes"]},
     )
 
     return {
-        "report": {
-            "id": report_id, "org_id": org_id, "year": year,
-            "status": "Generated", "generated_at": report_doc["generated_at"],
-            "report_type": "IMO DCS Annual", "pdf_url": f"/api/v1/reports/{report_id}/download",
-            "fleet_summary": report_doc["fleet_summary"],
-        },
-        "message": "IMO DCS report generated successfully",
+        "task_id": task_id,
+        "status": "queued",
+        "message": "Report generation queued",
     }
 
 

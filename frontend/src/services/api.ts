@@ -9,10 +9,7 @@ export const axiosInstance = axios.create({
 });
 
 axiosInstance.interceptors.request.use((config) => {
-  const token = useAuth.getState().accessToken;
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  // No need to set Authorization header — access token is sent via HttpOnly cookie automatically
   return config;
 });
 
@@ -23,8 +20,7 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const newToken = await refreshToken();
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        await refreshToken();
         return axiosInstance(originalRequest);
       } catch {
         useAuth.getState().logout();
@@ -45,10 +41,7 @@ export const register = (data: { email: string; password: string; full_name: str
 export const logout = () => axiosInstance.post('/auth/logout');
 
 export const refreshToken = async () => {
-  const response = await axiosInstance.post('/auth/refresh');
-  const newAccessToken = response.data.access_token;
-  useAuth.getState().setAccessToken(newAccessToken);
-  return newAccessToken;
+  await axiosInstance.post('/auth/refresh');
 };
 
 export const getMe = () => axiosInstance.get('/auth/me');

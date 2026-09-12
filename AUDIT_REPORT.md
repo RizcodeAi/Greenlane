@@ -159,18 +159,30 @@ This is the **3rd comprehensive audit** of the GreenLane Maritime platform. The 
 2. Synchronous PDF generation → Celery/RQ background task queue
 3. Access token in JS memory → Consider HttpOnly cookie
 4. No CSRF protection → Add double-submit cookie pattern
-5. No structured logging → Add JSON-formatted logging middleware
-6. No metrics endpoint → Add `/metrics` for Prometheus
-7. No CI/CD pipeline → Create `.github/workflows/ci.yml`
-8. README.md missing → Create comprehensive project documentation
-9. No `requirements.lock` → Add `pip-compile`
-10. MongoDB port exposed → Remove host port mapping
-11. No SSL/TLS → Add reverse proxy with SSL termination
-12. Frontend Vite preview → Replace with nginx for production
-13. N+1 query in emissions summary → Build `voyages_by_id` dict lookup
-14. Unbounded cursors in report generation → Add `.limit()`
-15. No health check database ping → Add MongoDB ping to `/health`
-16. No structured logging/observability → Add Python logging config
+5. No metrics endpoint → Add `/metrics` for Prometheus
+6. No CI/CD pipeline → Create `.github/workflows/ci.yml`
+7. README.md missing → Create comprehensive project documentation
+8. No `requirements.lock` → Add `pip-compile`
+9. MongoDB port exposed → Remove host port mapping
+10. No SSL/TLS → Add reverse proxy with SSL termination
+11. Frontend Vite preview → Replace with nginx for production
+12. N+1 query in emissions summary → Build `voyages_by_id` dict lookup
+13. Unbounded cursors in report generation → Add `.limit()`
+14. No health check database ping → Add MongoDB ping to `/health`
+
+### ✅ REMEDIATED — Request ID / Correlation ID Tracing & Structured Logging (2026-09-12)
+
+**P2 items resolved:**
+
+| Finding | Implementation |
+|---------|---------------|
+| No structured logging | `backend/app/core/logging.py` now has `JSONFormatter` with `request_id`, `trace_id`, `span_id`, `method`, `path`, `duration_ms` fields. `LoggerMiddleware` (Starlette `BaseHTTPMiddleware`) generates UUID4 hex per request, sets `contextvars`, logs start/end at INFO level. `RequestIDFilter` adds trace fields to every log record. |
+| No Request ID / correlation ID tracing | `LoggerMiddleware` generates unique `request_id` (uuid4 hex, no dashes) per request, sets `X-Request-ID` and `X-Trace-ID` response headers (same value for simplified correlation). `trace_request()` creates `contextvars.ContextVar[str]` for propagation. |
+| Structured logging middleware not wired | `backend/app/main.py` now imports `LoggerMiddleware` and adds it to the middleware stack BEFORE `SecurityHeadersMiddleware`. CORS `allow_headers` includes `X-Request-ID` and `X-Trace-ID`. |
+
+**Files changed:**
+- `backend/app/core/logging.py` — Added `RequestIDFilter`, `trace_request()`, `clear_trace()`, `log_request_start()`, `log_request_end()`, `LoggerMiddleware`, enhanced `JSONFormatter`, updated `setup_logging()`
+- `backend/app/main.py` — Added `LoggerMiddleware` import, added `LoggerMiddleware` before `SecurityHeadersMiddleware`, added `X-Request-ID` and `X-Trace-ID` to CORS `allow_headers`
 
 ---
 
@@ -184,6 +196,8 @@ This is the **3rd comprehensive audit** of the GreenLane Maritime platform. The 
 - [x] `main.py` has global exception handlers and restricted CORS
 - [x] `security.py` has token blacklist with `verify_access_token`, `verify_refresh_token`, `blacklist_token`
 - [x] `emissions.py` uses async cursor streaming instead of `to_list(10000)`
+- [x] `logging.py` has `LoggerMiddleware`, `RequestIDFilter`, `trace_request()`, enhanced `JSONFormatter` with request_id/trace_id/span_id/method/path/duration_ms
+- [x] `main.py` has `LoggerMiddleware` added before `SecurityHeadersMiddleware`; CORS includes `X-Request-ID` and `X-Trace-ID`
 - [x] `fleet.py`, `reports.py` import from `deps.py` instead of duplicating auth logic
 - [x] Frontend has `index.html`, `ErrorBoundary`, 401 interceptor, `jsx` flag in tsconfig
 - [x] Test infrastructure exists with pytest + vitest configurations
@@ -263,9 +277,7 @@ This is the **3rd comprehensive audit** of the GreenLane Maritime platform. The 
 - **Celery/RQ background tasks:** `generate_imo_dcs_report()` is synchronous — blocks request thread
 - **Access tokens in HttpOnly cookies:** Currently in JS memory — XSS-exposed
 - **CSRF protection:** No double-submit cookie pattern
-- **Structured logging middleware:** `backend/app/core/logging.py` exists but not wired as middleware
 - **Prometheus `/metrics` endpoint:** Not implemented
-- **Request ID / correlation ID tracing:** Not implemented
 
 ---
 

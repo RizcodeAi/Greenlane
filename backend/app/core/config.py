@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_REPLICA_SET: str = "rs0"
     DATABASE_NAME: str = "greenlane_db"
     REDIS_URL: str = "redis://localhost:6379"
 
@@ -28,8 +29,15 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "production"
 
+    # TLS certificate settings
+    CERT_PATH: str = "certs/server.crt"
+    CERT_KEY_PATH: str = "certs/server.key"
+    CERT_RENEWAL_DAYS: int = 30
+
     @property
     def mongodb_url(self) -> str:
+        if self.MONGODB_URL.startswith("mongodb://"):
+            return self.MONGODB_URL
         return self.MONGODB_URL
 
     @property

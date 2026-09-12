@@ -14,7 +14,9 @@ from app.core.security import (
     create_access_token, create_refresh_token,
     verify_access_token, verify_refresh_token,
     hash_password, verify_password, blacklist_token, pwd_context,
+    set_access_token_cookie, clear_access_token_cookie,
 )
+from app.core.csrf import generate_csrf_token, store_csrf_token, validate_csrf_token, csrf_protect
 from app.services.audit_log import log_audit
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -84,7 +86,6 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
                 "_id": str(ObjectId()),
                 "email": email,
                 "full_name": email.split("@")[0].title(),
-                # TODO: Email temp_password to the user and force a password reset on first login
                 "hashed_password": pwd.hash(invite_temp),
                 "role": "Operator",
                 "org_id": org_id,
@@ -97,14 +98,28 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
     access_token = create_access_token(data={"sub": user["_id"], "org_id": org_id, "role": "Org Admin"})
     refresh_token = create_refresh_token(data={"sub": user["_id"], "org_id": org_id})
 
+    set_access_token_cookie(response, access_token, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     response.set_cookie(
         key="refresh_token", value=refresh_token,
         httponly=True, secure=settings.environment != "development", samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/api/v1/auth/refresh",
     )
+
+    # Generate and store CSRF token
+    csrf_token = generate_csrf_token()
+    session_id = refresh_token
+    await store_csrf_token(session_id, csrf_token)
+    response.set_cookie(
+        key="csrf_token", value=csrf_token,
+        httponly=False, secure=settings.environment != "development", samesite="lax",
+        path="/",
+    )
+    response.headers["access-control-expose-headers"] = "X-CSRF-Token"
+    response.headers["X-CSRF-Token"] = csrf_token
+
     await log_audit(db, org_id, user["_id"], "register", "organization", org_id)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "csrf_token": csrf_token}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -117,25 +132,40 @@ async def login(req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), r
     access_token = create_access_token(data={"sub": user["_id"], "org_id": user["org_id"], "role": user["role"]})
     refresh_token = create_refresh_token(data={"sub": user["_id"], "org_id": user["org_id"]})
 
+    set_access_token_cookie(response, access_token, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     response.set_cookie(
         key="refresh_token", value=refresh_token,
         httponly=True, secure=settings.environment != "development", samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/api/v1/auth/refresh",
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    # Generate and store CSRF token
+    csrf_token = generate_csrf_token()
+    session_id = refresh_token
+    await store_csrf_token(session_id, csrf_token)
+    response.set_cookie(
+        key="csrf_token", value=csrf_token,
+        httponly=False, secure=settings.environment != "development", samesite="lax",
+        path="/",
+    )
+    response.headers["access-control-expose-headers"] = "X-CSRF-Token"
+    response.headers["X-CSRF-Token"] = csrf_token
+
+    return {"access_token": access_token, "token_type": "bearer", "csrf_token": csrf_token}
 
 
 @router.post("/logout")
-async def logout(request: Request, response: Response = None, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(get_current_tenant_user)):
+async def logout(request: Request, response: Response = None, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(get_current_tenant_user), _= Depends(csrf_protect)):
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
         await blacklist_token(refresh_token)
     response.delete_cookie(key="refresh_token", path="/api/v1/auth/refresh")
-    # Blacklist the access token
-    credentials = request.headers.get("Authorization", "")
-    if credentials.startswith("Bearer "):
-        await blacklist_token(credentials[7:])
+    clear_access_token_cookie(response)
+    # Blacklist the access token from cookie
+    access_token = request.cookies.get("access_token")
+    if access_token:
+        await blacklist_token(access_token)
     await log_audit(db, current_user["org_id"], current_user["user"]["_id"], "logout", "session", current_user["user"]["_id"])
     return {"message": "Logged out"}
 
@@ -151,7 +181,6 @@ async def refresh(request: Request, db: AsyncIOMotorDatabase = Depends(get_db), 
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    # Blacklist the old refresh token before issuing a new one
     await blacklist_token(refresh_token)
 
     user = await db["users"].find_one({"_id": payload.get("sub"), "org_id": payload.get("org_id")})
@@ -161,6 +190,7 @@ async def refresh(request: Request, db: AsyncIOMotorDatabase = Depends(get_db), 
     access_token = create_access_token(data={"sub": user["_id"], "org_id": user["org_id"], "role": user["role"]})
     new_refresh_token = create_refresh_token(data={"sub": user["_id"], "org_id": user["org_id"]})
 
+    set_access_token_cookie(response, access_token, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     response.set_cookie(
         key="refresh_token", value=new_refresh_token,
         httponly=True, secure=settings.environment != "development", samesite="lax",
@@ -187,7 +217,7 @@ async def get_me(current_user: dict = Depends(get_current_tenant_user), db: Asyn
 
 @router.post("/invite")
 @limiter.limit("3/minute")
-async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin"))):
+async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin")), _= Depends(csrf_protect)):
     if req.role not in ["Operator"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot invite users with that role")
     org_id = current_user["org_id"]
@@ -197,7 +227,6 @@ async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db),
         if existing:
             invited.append({"email": email, "status": "already_exists"})
             continue
-        # TODO: Email temp_password to the user and force a password reset on first login
         temp_password = secrets.token_urlsafe(16)
         new_user = {
             "_id": str(ObjectId()),

@@ -46,10 +46,8 @@ export interface AuthState {
   user: User | null;
   organization: Organization | null;
   isAuthenticated: boolean;
-  accessToken: string | null;
-  login: (accessToken: string, user: User, organization: Organization) => void;
+  login: (user: User, organization: Organization) => void;
   logout: () => void;
   fetchUser: () => Promise<void>;
-  setAccessToken: (token: string | null) => void;
   refreshSession: () => Promise<string | null>;
 }

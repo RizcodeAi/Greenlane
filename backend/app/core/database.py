@@ -9,9 +9,11 @@ client = AsyncIOMotorClient(
     connectTimeoutMS=10000,
     socketTimeoutMS=30000,
     serverSelectionTimeoutMS=10000,
+    replicaSet=settings.MONGODB_REPLICA_SET,
     w="majority",
     j=True,
-    readPreference="primaryPreferred",
+    readPreference="secondaryPreferred",
+    retryWrites=True,
 )
 db = client[settings.database_name]
 

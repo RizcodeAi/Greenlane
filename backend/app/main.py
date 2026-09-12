@@ -10,12 +10,19 @@ from starlette.responses import Response, JSONResponse
 
 from app.core.config import settings
 from app.core.database import client, close_db, init_db_indexes, db
-from app.core.logging import setup_logging
+from app.core.logging import setup_logging, LoggerMiddleware
+from app.core.metrics import (
+    metrics_init,
+    MetricsMiddleware,
+    metrics_endpoint,
+)
+from app.core.csrf import CSRFProtectionMiddleware
 from app.api.v1 import auth
 from app.api.v1 import fleet
 from app.api.v1 import dashboard
 from app.api.v1 import emissions
 from app.api.v1 import reports
+from app.tasks.celery_app import celery_app
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -37,6 +44,7 @@ async def lifespan(app: FastAPI):
     app.state.limiter = auth.limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     setup_logging()
+    metrics_init()
     await init_db_indexes(db)
     yield
     await close_db()
@@ -49,14 +57,36 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# LoggerMiddleware must come BEFORE SecurityHeadersMiddleware so that
+# X-Request-ID and X-Trace-ID are already set when security headers
+# are applied to the response.
+app.add_middleware(LoggerMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(MetricsMiddleware)
+
+
+class AccessTokenCookieMiddleware(BaseHTTPMiddleware):
+    """Middleware that reads the access_token cookie and adds it to request state
+    if the Authorization header is missing. This ensures backward compatibility
+    for downstream middleware/dependencies that may check the header."""
+    async def dispatch(self, request: Request, call_next):
+        if not request.headers.get("Authorization"):
+            cookie_token = request.cookies.get("access_token")
+            if cookie_token:
+                request.state.access_token = cookie_token
+        response: Response = await call_next(request)
+        return response
+
+
+app.add_middleware(AccessTokenCookieMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Trace-ID", "X-CSRF-Token"],
 )
+app.add_middleware(CSRFProtectionMiddleware)
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(fleet.router, prefix="/api/v1/fleet", tags=["Fleet Management"])
@@ -91,3 +121,8 @@ async def health_check():
             status_code=503,
             content={"status": "degraded"},
         )
+
+
+@app.get("/metrics", tags=["Metrics"])
+async def metrics(request: Request):
+    return await metrics_endpoint(request)

@@ -19,7 +19,7 @@ export default function Login() {
       const res = await login({ email, password });
       const { access_token } = res.data;
       const userRes = await getMe();
-      authLogin(access_token, userRes.data.user, userRes.data.organization);
+      authLogin(userRes.data.user, userRes.data.organization);
       navigate('/dashboard');
     } catch {
       setError('Invalid credentials. Please try again.');

@@ -8,19 +8,56 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/greenlane_db?authSource=admin
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
+      - MONGODB_REPLICA_SET=rs0
       - DATABASE_NAME=greenlane_db
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
-      mongo:
+      mongo-1:
+        condition: service_healthy
+      mongo-2:
+        condition: service_healthy
+      mongo-3:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
+      - MONGODB_REPLICA_SET=rs0
+      - DATABASE_NAME=greenlane_db
+      - JWT_SECRET=${JWT_SECRET}
+      - REFRESH_SECRET=${REFRESH_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+    depends_on:
+      mongo-1:
+        condition: service_healthy
+      mongo-2:
+        condition: service_healthy
+      mongo-3:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app worker --loglevel=info
     deploy:
       resources:
         limits:
@@ -51,17 +88,19 @@ services:
           cpus: '0.1'
           memory: 64M
 
-  mongo:
+  mongo-1:
     image: mongo:7
+    hostname: mongo-1
+    ports:
+      - "27017:27017"
     volumes:
-      - mongo_data:/data/db
-    command: --auth
-    # No ports exposed — MongoDB is only accessible via internal Docker network
+      - mongo1_data:/data/db
+    command: --auth --replSet rs0 --bind_ip_all
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -74,6 +113,78 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+
+  mongo-2:
+    image: mongo:7
+    hostname: mongo-2
+    ports:
+      - "27018:27018"
+    volumes:
+      - mongo2_data:/data/db
+    command: --auth --replSet rs0 --bind_ip_all
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    healthcheck:
+      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  mongo-3:
+    image: mongo:7
+    hostname: mongo-3
+    ports:
+      - "27019:27019"
+    volumes:
+      - mongo3_data:/data/db
+    command: --auth --replSet rs0 --bind_ip_all
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    healthcheck:
+      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  mongo-init:
+    image: mongo:7
+    command: >
+      sh -c "
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
+        \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27018'},{_id:2,host:'mongo-3:27019'}]})\" &&
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
+        \"rs.add('mongo-2:27018')\" &&
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
+        \"rs.add('mongo-3:27019')\"
+      "
+    depends_on:
+      mongo-1:
+        condition: service_healthy
+      mongo-2:
+        condition: service_healthy
+      mongo-3:
+        condition: service_healthy
+    restart: "no"
 
   redis:
     image: redis:7-alpine
@@ -99,10 +210,12 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./frontend/nginx.conf:/etc/nginx/conf.d/frontend.conf:ro
       - ./certs:/etc/nginx/certs:ro
+      - ./certs/renewal.sh:/usr/local/bin/renewal.sh:ro
     depends_on:
       - backend
       - frontend
     restart: unless-stopped
+    command: sh -c "openssl x509 -checkend $((30 * 86400)) -noout -in /etc/nginx/certs/server.crt 2>/dev/null || /usr/local/bin/renewal.sh; exec nginx -g 'daemon off;'"
     deploy:
       resources:
         limits:
@@ -112,6 +225,52 @@ services:
           cpus: '0.1'
           memory: 32M
 
+  cert-renewer:
+    image: alpine:latest
+    command: sh -c "apk add --no-cache openssl curl && while true; do /usr/local/bin/renewal.sh || true; sleep 86400; done"
+    volumes:
+      - ./certs:/etc/certs:ro
+      - ./certs/renewal.sh:/usr/local/bin/renewal.sh:ro
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
 volumes:
-  mongo_data:
+  mongo1_data:
+  mongo2_data:
+  mongo3_data:
   redis_data:
+  prometheus_data:

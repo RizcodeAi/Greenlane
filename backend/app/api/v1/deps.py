@@ -1,6 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 
 from app.core.database import get_db
 from app.core.security import verify_access_token
@@ -9,12 +9,21 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_tenant_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> dict:
-    if not credentials:
+    # Try to get token from cookie first (HttpOnly cookie-based auth)
+    token = request.cookies.get("access_token")
+
+    # Fall back to Authorization header for backward compatibility
+    if not token and credentials:
+        token = credentials.credentials
+
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = await verify_access_token(credentials.credentials)
+
+    payload = await verify_access_token(token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     user_id = payload.get("sub")
