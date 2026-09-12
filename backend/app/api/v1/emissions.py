@@ -345,6 +345,8 @@ async def get_emissions_summary(
     if len(emissions_records) > 500:
         emissions_records = emissions_records[:500]
 
+    voyages_by_id = {v["id"]: v for v in voyages}
+
     total_co2 = 0.0
     total_co2e = 0.0
     total_fuel_mt = 0.0
@@ -372,8 +374,8 @@ async def get_emissions_summary(
         for pol in by_pollutant:
             by_pollutant[pol] += rec["emissions"][pol]
 
-        # EEOI average
-        voyage = next((v for v in voyages if v["id"] == rec["voyage_id"]), None)
+        # EEOI average — using dict lookup instead of N+1 scan
+        voyage = voyages_by_id.get(rec["voyage_id"])
         if voyage and voyage.get("cargo_mt") and voyage.get("distance_nm"):
             cargo = voyage["cargo_mt"]
             dist = voyage["distance_nm"]

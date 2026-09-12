@@ -62,9 +62,9 @@ export default function AddVoyageModal({ isOpen, onClose, onSubmit, loading }: P
       departure_date: form.departure_date,
       arrival_date: form.arrival_date || undefined as any,
       fuel_type: form.fuel_type,
-      fuel_consumed_mt: Number(form.fuel_consumed_mt),
-      distance_nm: Number(form.distance_nm),
-      cargo_mt: Number(form.cargo_mt) || 0,
+      fuel_consumed_mt: form.fuel_consumed_mt,
+      distance_nm: form.distance_nm,
+      cargo_mt: form.cargo_mt || '0',
     });
   };
 

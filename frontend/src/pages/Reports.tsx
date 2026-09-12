@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../store/auth';
 import {
   generateReport,
@@ -22,6 +22,7 @@ export default function Reports() {
   const [generating, setGenerating] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [selectedYear, setSelectedYear] = useState<number>(2024);
   const [counts, setCounts] = useState({ Draft: 0, Generated: 0, Submitted: 0 });
 
   const fetchReports = async () => {
@@ -132,7 +133,7 @@ export default function Reports() {
               {VALID_YEARS.map((year) => (
                 <button
                   key={year}
-                  onClick={() => { handleGenerate(year); }}
+                  onClick={() => { setSelectedYear(year); handleGenerate(year); }}
                   disabled={generating}
                   className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
                     selectedYear === year

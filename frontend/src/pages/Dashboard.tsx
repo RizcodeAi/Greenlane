@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../store/auth';
 import { getDashboardSummary } from '../services/dashboard';
 import { FleetSummary } from '../services/dashboard';
@@ -10,7 +10,7 @@ export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
   const [summary, setSummary] = useState<FleetSummary | null>(null);
   const [vessels, setVessels] = useState<MapVessel[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated) return;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getShipById, deleteShip, Ship } from '../services/fleet';
 
@@ -9,7 +9,7 @@ export default function ShipDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [, _setActionLoading] = useState(false);
 
   const FUEL_LABELS: Record<string, string> = { HFO: 'HFO', MGO: 'MGO', LNG: 'LNG', Methanol: 'Methanol' };
   const VESSEL_TYPE_LABELS: Record<string, string> = {

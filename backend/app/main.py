@@ -10,6 +10,7 @@ from starlette.responses import Response, JSONResponse
 
 from app.core.config import settings
 from app.core.database import client, close_db, init_db_indexes, db
+from app.core.logging import setup_logging
 from app.api.v1 import auth
 from app.api.v1 import fleet
 from app.api.v1 import dashboard
@@ -34,6 +35,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     app.state.limiter = auth.limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    setup_logging()
     await init_db_indexes(db)
     yield
     await close_db()
@@ -80,4 +82,11 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy", "service": "greenlane-backend"}
+    try:
+        await db.command("ping")
+        return {"status": "healthy", "database": "connected"}
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "database": "unreachable"},
+        )

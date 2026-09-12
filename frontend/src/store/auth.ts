@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { User, Organization, AuthState } from '../types';
 import { getMe, logout as apiLogout } from '../services/api';
 
-export const useAuth = create<AuthState>()((set, get) => ({
+export const useAuth = create<AuthState>()((set) => ({
   user: null,
   organization: null,
   isAuthenticated: false,

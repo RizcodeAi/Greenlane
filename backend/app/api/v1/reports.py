@@ -38,7 +38,7 @@ async def generate_report(
 
     # Fetch all ships for the org using cursor
     ships = []
-    ships_cursor = db["ships"].find({"org_id": org_id})
+    ships_cursor = db["ships"].find({"org_id": org_id}).limit(1000)
     async for doc in ships_cursor:
         ships.append(doc)
 
@@ -49,7 +49,7 @@ async def generate_report(
     voyages_cursor = db["voyages"].find({
         "org_id": org_id,
         "created_at": {"$gte": start, "$lt": end},
-    })
+    }).limit(1000)
     async for doc in voyages_cursor:
         voyages.append(doc)
 
@@ -60,7 +60,7 @@ async def generate_report(
     if voyage_ids:
         emissions_cursor = db["emissions_computed"].find({
             "voyage_id": {"$in": voyage_ids},
-        })
+        }).limit(1000)
         async for doc in emissions_cursor:
             emissions_records.append(doc)
 

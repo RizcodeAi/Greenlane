@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../store/auth';
 import { getEmissionsSummaryData, EmissionsSummary } from '../services/emissions';
 
@@ -22,13 +22,12 @@ export default function EmissionsAnalytics() {
   }
 
   const fuelTypes = ['HFO', 'MGO', 'LNG', 'Methanol'];
-  const fuelColors = { HFO: '#F97316', MGO: '#3B82F6', LNG: '#06B6D4', Methanol: '#A855F7' };
-  const pollutantColors = { co2: '#22C55E', ch4: '#F59E0B', n2o: '#EF4444', sox: '#8B5CF6', nox: '#3B82F6' };
-  const pollutantLabels = { co2: 'CO2', ch4: 'CH4', n2o: 'N2O', sox: 'SOx', nox: 'NOx' };
+  const fuelColors: Record<string, string> = { HFO: '#F97316', MGO: '#3B82F6', LNG: '#06B6D4', Methanol: '#A855F7' };
+  const pollutantColors: Record<string, string> = { co2: '#22C55E', ch4: '#F59E0B', n2o: '#EF4444', sox: '#8B5CF6', nox: '#3B82F6' };
+  const pollutantLabels: Record<string, string> = { co2: 'CO2', ch4: 'CH4', n2o: 'N2O', sox: 'SOx', nox: 'NOx' };
 
   const maxFuel = Math.max(...Object.values(summary?.by_fuel_type || {}).map((v: any) => v.co2e), 1);
-  const maxPoll = Math.max(...Object.values(summary?.by_pollutant || {}), 1);
-
+  
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}

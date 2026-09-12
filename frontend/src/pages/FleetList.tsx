@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getShips, deleteShip, Ship } from '../services/fleet';
+import { getShips, deleteShip, createShip, Ship } from '../services/fleet';
 import AddShipModal from '../components/AddShipModal';
 
 export default function FleetList() {
