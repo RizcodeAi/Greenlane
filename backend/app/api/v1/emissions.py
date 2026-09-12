@@ -156,7 +156,7 @@ async def list_voyages(
     # Fetch latest emissions (any version) for history count
     for v in voyages:
         v["_id"] = str(v["_id"])
-        v["id"] = v.pop("_id") if isinstance(v.get("id"), str) else str(v.get("id"))
+        v["id"] = v.pop("_id")
         v["emissions"] = emissions_map.get(v["id"])
 
     return {"voyages": voyages, "total": total, "page": page, "page_size": page_size}
@@ -176,14 +176,14 @@ async def get_voyage(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
     voyage["_id"] = str(voyage["_id"])
-    voyage["id"] = voyage.pop("_id") if isinstance(voyage.get("id"), str) else str(voyage.get("id"))
+    voyage["id"] = voyage.pop("_id")
 
     # Fetch all emissions versions for this voyage
-    history_cursor = db["emissions_computed"].find({"voyage_id": voyage_id}).sort("calculation_version", -1)
+    history_cursor = db["emissions_computed"].find({"voyage_id": voyage_id, "org_id": org_id}).sort("calculation_version", -1)
     history = await history_cursor.to_list(length=100)
     for h in history:
         h["_id"] = str(h["_id"])
-        h["id"] = h.pop("_id") if isinstance(h.get("id"), str) else str(h.get("id"))
+        h["id"] = h.pop("_id")
         h["calculated_at"] = h["calculated_at"].isoformat() if isinstance(h.get("calculated_at"), datetime) else h.get("calculated_at")
 
     voyage["emissions_history"] = history
@@ -232,7 +232,7 @@ async def update_voyage(
     # Fetch updated voyage
     updated_voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
     updated_voyage["_id"] = str(updated_voyage["_id"])
-    updated_voyage["id"] = updated_voyage.pop("_id") if isinstance(updated_voyage.get("id"), str) else str(updated_voyage.get("id"))
+    updated_voyage["id"] = updated_voyage.pop("_id")
 
     # Re-compute emissions
     fuel_type = update_dict.get("fuel_type", voyage["fuel_type"])

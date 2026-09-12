@@ -66,7 +66,7 @@ jobs:
         env:
           MONGODB_URL: mongodb://localhost:27017
           MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: example
+          MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
         run: |
           cd backend
           pytest --cov=app --cov-report=xml --cov-report=term-missing -v

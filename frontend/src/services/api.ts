@@ -23,8 +23,7 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        await refreshToken();
-        const newToken = useAuth.getState().accessToken;
+        const newToken = await refreshToken();
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return axiosInstance(originalRequest);
       } catch {
@@ -45,7 +44,12 @@ export const register = (data: { email: string; password: string; full_name: str
 
 export const logout = () => axiosInstance.post('/auth/logout');
 
-export const refreshToken = () => axiosInstance.post('/auth/refresh');
+export const refreshToken = async () => {
+  const response = await axiosInstance.post('/auth/refresh');
+  const newAccessToken = response.data.access_token;
+  useAuth.getState().setAccessToken(newAccessToken);
+  return newAccessToken;
+};
 
 export const getMe = () => axiosInstance.get('/auth/me');
 

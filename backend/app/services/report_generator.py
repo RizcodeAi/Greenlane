@@ -18,8 +18,6 @@ from reportlab.platypus import (
     TableStyle, KeepTogether, PageBreak,
 )
 
-from app.core.database import db
-
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports_storage")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 

@@ -20,7 +20,7 @@ async def get_current_tenant_user(
     user_id = payload.get("sub")
     org_id = payload.get("org_id")
     role = payload.get("role", "Operator")
-    user = await db["users"].find_one({"_id": user_id, "org_id": org_id})
+    user = await db["users"].find_one({"_id": user_id, "org_id": org_id, "is_active": True})
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return {"user": user, "org_id": org_id, "role": role}

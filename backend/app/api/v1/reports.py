@@ -60,6 +60,7 @@ async def generate_report(
     if voyage_ids:
         emissions_cursor = db["emissions_computed"].find({
             "voyage_id": {"$in": voyage_ids},
+            "org_id": org_id,
         }).limit(1000)
         async for doc in emissions_cursor:
             emissions_records.append(doc)
@@ -134,7 +135,7 @@ async def list_reports(
 
     for r in reports:
         r["_id"] = str(r["_id"])
-        r["id"] = r.pop("_id") if isinstance(r.get("id"), str) else str(r.get("id"))
+        r["id"] = r.pop("_id")
         r["generated_at"] = r["generated_at"].isoformat() if isinstance(r.get("generated_at"), datetime) else r.get("generated_at")
 
     return {"reports": reports, "total": len(reports)}
@@ -153,7 +154,7 @@ async def get_report(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     report["_id"] = str(report["_id"])
-    report["id"] = report.pop("_id") if isinstance(report.get("id"), str) else str(report.get("id"))
+    report["id"] = report.pop("_id")
     report["generated_at"] = report["generated_at"].isoformat() if isinstance(report.get("generated_at"), datetime) else report.get("generated_at")
 
     return {"report": report}

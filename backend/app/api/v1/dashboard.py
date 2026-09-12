@@ -80,8 +80,8 @@ async def get_dashboard_summary(
         {"$match": {"org_id": org_id, "calculated_at": {"$gte": start_of_year}}},
         {"$group": {
             "_id": None,
-            "total_co2_kg": {"$sum": "$co2_kg"},
-            "total_fuel_l": {"$sum": "$fuel_consumed_l"},
+            "total_co2": {"$sum": "$emissions.co2"},
+            "total_fuel": {"$sum": "$fuel_consumed_mt"},
             "count": {"$sum": 1},
         }},
     ]
@@ -90,8 +90,8 @@ async def get_dashboard_summary(
     total_co2_ytd = 0.0
     total_fuel_ytd = 0.0
     if emission_result and emission_result[0].get("count", 0) > 0:
-        total_co2_ytd = round(emission_result[0].get("total_co2_kg", 0) / 1000, 2)
-        total_fuel_ytd = round(emission_result[0].get("total_fuel_l", 0) / 1000, 2)
+        total_co2_ytd = round(emission_result[0].get("total_co2", 0), 4)
+        total_fuel_ytd = round(emission_result[0].get("total_fuel", 0), 4)
 
     # Average CII rating
     cii_ratings = [s.get("cii_rating") for s in ships if s.get("cii_rating")]

@@ -8,7 +8,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://mongo:27017
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/greenlane_db?authSource=admin
       - DATABASE_NAME=greenlane_db
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
@@ -50,11 +50,10 @@ services:
 
   mongo:
     image: mongo:7
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     command: --auth
+    # No ports exposed — MongoDB is only accessible via internal Docker network
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}

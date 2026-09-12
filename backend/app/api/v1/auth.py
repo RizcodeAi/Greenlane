@@ -88,7 +88,7 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
                 "full_name": email.split("@")[0].title(),
                 # TODO: Email temp_password to the user and force a password reset on first login
                 "hashed_password": pwd.hash(invite_temp),
-                "role": req.role,
+                "role": "Operator",
                 "org_id": org_id,
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc),

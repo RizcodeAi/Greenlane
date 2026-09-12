@@ -68,7 +68,7 @@ app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": exc.body},
+        content={"detail": exc.errors()},
     )
 
 
@@ -88,5 +88,5 @@ async def health_check():
     except Exception:
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "database": "unreachable"},
+            content={"status": "degraded"},
         )
