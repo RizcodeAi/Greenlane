@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "greenlane_db"
+    REDIS_URL: str = "redis://localhost:6379"
 
     JWT_SECRET: str
     REFRESH_SECRET: str
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
         return v
 
     LOG_LEVEL: str = "INFO"
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str = "production"
 
     @property
     def mongodb_url(self) -> str:
@@ -38,6 +39,10 @@ class Settings(BaseSettings):
     @property
     def environment(self) -> str:
         return self.ENVIRONMENT
+
+    @property
+    def redis_url(self) -> str:
+        return self.REDIS_URL
 
 
 settings = Settings()

@@ -6,11 +6,11 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
-from app.core.database import get_db
+from app.core.database import get_db, client as motor_client
 from app.core.security import verify_access_token
 from app.services.audit_log import log_audit
 from app.services.emissions_calculator import calculate_voyage_emissions
-from app.models.schemas import VoyageCreate
+from app.models.schemas import VoyageCreate, VoyageUpdate
 from app.api.v1.deps import get_current_tenant_user, require_role
 
 router = APIRouter()
@@ -62,23 +62,25 @@ async def create_voyage(
         "created_at": now,
         "updated_at": now,
     }
-    await db["voyages"].insert_one(voyage)
+    async with await motor_client.start_session() as session:
+        async with session.start_transaction():
+            await db["voyages"].insert_one(voyage, session=session)
 
-    # Compute and store emissions (version 1, is_current=True)
-    emissions_record = build_emissions_record(
-        voyage_id=voyage_id,
-        org_id=org_id,
-        asset_id=asset_id,
-        fuel_type=fuel_type,
-        fuel_consumed_mt=fuel_consumed_mt,
-        distance_nm=distance_nm,
-        cargo_mt=cargo_mt,
-        calculation_version=1,
-        is_current=True,
-    )
-    await db["emissions_computed"].insert_one(emissions_record)
+            # Compute and store emissions (version 1, is_current=True)
+            emissions_record = build_emissions_record(
+                voyage_id=voyage_id,
+                org_id=org_id,
+                asset_id=asset_id,
+                fuel_type=fuel_type,
+                fuel_consumed_mt=fuel_consumed_mt,
+                distance_nm=distance_nm,
+                cargo_mt=cargo_mt,
+                calculation_version=1,
+                is_current=True,
+            )
+            await db["emissions_computed"].insert_one(emissions_record, session=session)
 
-    # Audit log
+    # Audit log (outside transaction)
     await log_audit(
         db, org_id, current_user["user"]["_id"],
         "create", "voyage", voyage_id,
@@ -139,6 +141,10 @@ async def list_voyages(
     voyages = await cursor.to_list(length=page_size)
     total = await db["voyages"].count_documents(query)
 
+    # Convert ObjectId to string id before extracting voyage_ids
+    for v in voyages:
+        v["id"] = str(v["_id"])
+
     voyage_ids = [v["id"] for v in voyages]
 
     # Fetch current emissions for each voyage
@@ -155,8 +161,6 @@ async def list_voyages(
 
     # Fetch latest emissions (any version) for history count
     for v in voyages:
-        v["_id"] = str(v["_id"])
-        v["id"] = v.pop("_id")
         v["emissions"] = emissions_map.get(v["id"])
 
     return {"voyages": voyages, "total": total, "page": page, "page_size": page_size}
@@ -193,7 +197,7 @@ async def get_voyage(
 @router.put("/voyages/{voyage_id}", response_model=dict)
 async def update_voyage(
     voyage_id: str,
-    update_data: VoyageCreate,
+    update_data: VoyageUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Fleet Manager", "Org Admin", "Compliance Officer")),
 ):
@@ -205,55 +209,58 @@ async def update_voyage(
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
-    # Mark previous emissions as not current
-    await db["emissions_computed"].update_many(
-        {"voyage_id": voyage_id, "org_id": org_id},
-        {"$set": {"is_current": False}},
-    )
+    async with await motor_client.start_session() as session:
+        async with session.start_transaction():
+            # Mark previous emissions as not current
+            await db["emissions_computed"].update_many(
+                {"voyage_id": voyage_id, "org_id": org_id},
+                {"$set": {"is_current": False}},
+                session=session,
+            )
 
-    # Get current version
-    current_emissions = await db["emissions_computed"].find_one({
-        "voyage_id": voyage_id, "is_current": True,
-    })
-    prev_version = current_emissions["calculation_version"] if current_emissions else 0
-    new_version = prev_version + 1
+            # Get current version
+            current_emissions = await db["emissions_computed"].find_one({
+                "voyage_id": voyage_id, "is_current": True, "org_id": org_id,
+            }, session=session)
+            prev_version = current_emissions["calculation_version"] if current_emissions else 0
+            new_version = prev_version + 1
 
-    # Build updated voyage fields
-    update_dict = update_data.model_dump()
-    allowed_fields = [
-        "departure_port", "arrival_port", "departure_date", "arrival_date",
-        "fuel_type", "fuel_consumed_mt", "distance_nm", "cargo_mt", "updated_at",
-    ]
-    update_fields = {k: v for k, v in update_dict.items() if k in allowed_fields}
-    update_fields["updated_at"] = datetime.now(timezone.utc)
+            # Build updated voyage fields
+            update_dict = update_data.model_dump()
+            allowed_fields = [
+                "departure_port", "arrival_port", "departure_date", "arrival_date",
+                "fuel_type", "fuel_consumed_mt", "distance_nm", "cargo_mt", "updated_at",
+            ]
+            update_fields = {k: v for k, v in update_dict.items() if k in allowed_fields}
+            update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    await db["voyages"].update_one({"_id": ObjectId(voyage_id)}, {"$set": update_fields})
+            await db["voyages"].update_one({"_id": ObjectId(voyage_id)}, {"$set": update_fields}, session=session)
 
-    # Fetch updated voyage
-    updated_voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
-    updated_voyage["_id"] = str(updated_voyage["_id"])
-    updated_voyage["id"] = updated_voyage.pop("_id")
+            # Fetch updated voyage
+            updated_voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id}, session=session)
+            updated_voyage["_id"] = str(updated_voyage["_id"])
+            updated_voyage["id"] = updated_voyage.pop("_id")
 
-    # Re-compute emissions
-    fuel_type = update_dict.get("fuel_type", voyage["fuel_type"])
-    fuel_consumed_mt = float(update_dict.get("fuel_consumed_mt", voyage["fuel_consumed_mt"]))
-    distance_nm = float(update_dict.get("distance_nm", voyage["distance_nm"]))
-    cargo_mt = float(update_dict.get("cargo_mt", voyage.get("cargo_mt", 0)))
+            # Re-compute emissions
+            fuel_type = update_dict.get("fuel_type", voyage["fuel_type"])
+            fuel_consumed_mt = float(update_dict.get("fuel_consumed_mt", voyage["fuel_consumed_mt"]))
+            distance_nm = float(update_dict.get("distance_nm", voyage["distance_nm"]))
+            cargo_mt = float(update_dict.get("cargo_mt", voyage.get("cargo_mt", 0)))
 
-    new_emissions_record = build_emissions_record(
-        voyage_id=voyage_id,
-        org_id=org_id,
-        asset_id=updated_voyage["asset_id"],
-        fuel_type=fuel_type,
-        fuel_consumed_mt=fuel_consumed_mt,
-        distance_nm=distance_nm,
-        cargo_mt=cargo_mt,
-        calculation_version=new_version,
-        is_current=True,
-    )
-    await db["emissions_computed"].insert_one(new_emissions_record)
+            new_emissions_record = build_emissions_record(
+                voyage_id=voyage_id,
+                org_id=org_id,
+                asset_id=updated_voyage["asset_id"],
+                fuel_type=fuel_type,
+                fuel_consumed_mt=fuel_consumed_mt,
+                distance_nm=distance_nm,
+                cargo_mt=cargo_mt,
+                calculation_version=new_version,
+                is_current=True,
+            )
+            await db["emissions_computed"].insert_one(new_emissions_record, session=session)
 
-    # Audit log
+    # Audit log (outside transaction)
     await log_audit(
         db, org_id, current_user["user"]["_id"],
         "update", "voyage", voyage_id,
@@ -318,12 +325,11 @@ async def get_emissions_summary(
         "created_at": {"$gte": start_date},
     }
 
-    voyages_cursor = db["voyages"].find(voyage_query)
+    voyages_cursor = db["voyages"].find(voyage_query).limit(500)
     voyages = []
     async for v in voyages_cursor:
+        v["id"] = str(v["_id"])
         voyages.append(v)
-    if len(voyages) > 500:
-        voyages = voyages[:500]
     voyage_ids = [v["id"] for v in voyages]
 
     if not voyage_ids:
@@ -338,7 +344,7 @@ async def get_emissions_summary(
         "voyage_id": {"$in": voyage_ids},
         "is_current": True,
         "org_id": org_id,
-    })
+    }).limit(500)
     emissions_records = []
     async for e in emissions_cursor:
         emissions_records.append(e)

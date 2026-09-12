@@ -2,32 +2,42 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import redis.asyncio as aioredis
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire, "type": "access"})
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.ALGORITHM)
+_redis_pool: Optional[aioredis.Redis] = None
 
 
-def create_refresh_token(data: dict) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode = data.copy()
-    to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, settings.REFRESH_SECRET, algorithm=settings.ALGORITHM)
+async def get_redis() -> aioredis.Redis:
+    global _redis_pool
+    if _redis_pool is None or _redis_pool.connection_pool.disconnected:
+        _redis_pool = aioredis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+        )
+    return _redis_pool
 
 
-# In-memory token blacklist (use Redis in production)
-_token_blacklist: set = set()
-
-
-def verify_access_token(token: str) -> Optional[dict]:
+async def blacklist_token(token: str) -> None:
+    """Add a token to the Redis blacklist with TTL."""
+    redis = await get_redis()
+    # Decode the token to get the expiry and set TTL accordingly
     try:
-        if token in _token_blacklist:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
+        exp = payload.get("exp")
+        if exp:
+            ttl = max(exp - int(datetime.now(timezone.utc).timestamp()), 0)
+            await redis.setex(f"bl:{token}", ttl, "1")
+    except JWTError:
+        await redis.setex(f"bl:{token}", 86400, "1")
+
+
+async def verify_access_token(token: str) -> Optional[dict]:
+    try:
+        redis = await get_redis()
+        if await redis.exists(f"bl:{token}"):
             return None
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
         if payload.get("type") != "access":
@@ -37,9 +47,10 @@ def verify_access_token(token: str) -> Optional[dict]:
         return None
 
 
-def verify_refresh_token(token: str) -> Optional[dict]:
+async def verify_refresh_token(token: str) -> Optional[dict]:
     try:
-        if token in _token_blacklist:
+        redis = await get_redis()
+        if await redis.exists(f"bl:{token}"):
             return None
         payload = jwt.decode(token, settings.REFRESH_SECRET, algorithms=[settings.ALGORITHM])
         if payload.get("type") != "refresh":
@@ -47,11 +58,6 @@ def verify_refresh_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
-
-
-def blacklist_token(token: str) -> None:
-    """Add a token to the blacklist. Called on logout."""
-    _token_blacklist.add(token)
 
 
 def hash_password(password: str) -> str:

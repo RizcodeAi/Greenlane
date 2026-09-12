@@ -98,7 +98,7 @@ async def list_ships(
     """List ships for the current organization with search and filter."""
     org_id = current_user["org_id"]
 
-    query = {"org_id": org_id}
+    query = {"org_id": org_id, "is_deleted": False}
 
     if search:
         escaped_search = re.escape(search)
@@ -144,7 +144,7 @@ async def get_ship(
 ):
     """Get detailed info of a single ship owned by the org."""
     org_id = current_user["org_id"]
-    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
+    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id, "is_deleted": False})
     if not ship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ship not found")
 
@@ -174,7 +174,7 @@ async def update_ship(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                           detail=f"Invalid status. Must be one of: {', '.join(sorted(VALID_STATUSES))}")
 
-    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
+    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id, "is_deleted": False})
     if not ship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ship not found")
 
@@ -214,13 +214,23 @@ async def delete_ship(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Org Admin")),
 ):
-    """Delete ship (requires Org Admin role). Hard delete."""
+    """Soft delete ship (requires Org Admin role). Cascades to voyages."""
     org_id = current_user["org_id"]
     ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
     if not ship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ship not found")
 
-    await db["ships"].delete_one({"_id": ObjectId(ship_id)})
+    deleted_at = datetime.now(timezone.utc)
+    await db["ships"].update_one(
+        {"_id": ObjectId(ship_id)},
+        {"$set": {"is_deleted": True, "deleted_at": deleted_at}},
+    )
+
+    # Cascade: soft delete associated voyages
+    await db["voyages"].update_many(
+        {"asset_id": ship.get("id"), "org_id": org_id},
+        {"$set": {"is_deleted": True, "deleted_at": deleted_at}},
+    )
 
     await log_audit(
         db, org_id, current_user["user"]["_id"],
@@ -228,4 +238,4 @@ async def delete_ship(
         {"imo_number": ship.get("imo_number"), "name": ship.get("name")},
     )
 
-    return {"message": "Ship deleted successfully"}
+    return {"message": "Ship soft deleted successfully"}

@@ -23,6 +23,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
@@ -84,7 +85,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 async def health_check():
     try:
         await db.command("ping")
-        return {"status": "healthy", "database": "connected"}
+        return {"status": "healthy"}
     except Exception:
         return JSONResponse(
             status_code=503,

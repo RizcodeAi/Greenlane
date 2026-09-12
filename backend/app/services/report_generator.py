@@ -205,10 +205,6 @@ def generate_imo_dcs_report(
         rec.get("emissions", {}).get("co2", 0) for rec in emissions_records
     )
     total_transport_work = sum(
-        rec.get("fuel_consumed_mt", 0) * 0 for rec in emissions_records
-    )
-    # Recompute transport work from voyages
-    total_transport_work = sum(
         v.get("distance_nm", 0) * v.get("cargo_mt", 0)
         for v in voyages if v.get("cargo_mt") and v.get("distance_nm")
     )

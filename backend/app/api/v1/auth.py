@@ -5,7 +5,6 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from passlib.context import CryptContext
 from pydantic import BaseModel
 from bson import ObjectId
 
@@ -14,7 +13,7 @@ from app.core.database import get_db
 from app.core.security import (
     create_access_token, create_refresh_token,
     verify_access_token, verify_refresh_token,
-    hash_password, verify_password, blacklist_token,
+    hash_password, verify_password, blacklist_token, pwd_context,
 )
 from app.services.audit_log import log_audit
 from slowapi import Limiter
@@ -23,7 +22,6 @@ from app.api.v1.deps import get_current_tenant_user, require_role, security
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class RegisterRequest(BaseModel):
@@ -112,7 +110,7 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def login(req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
-    user = await db["users"].find_one({"email": req.email})
+    user = await db["users"].find_one({"email": req.email, "is_active": True})
     if not user or not pwd.verify(req.password, user["hashed_password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
@@ -132,12 +130,12 @@ async def login(req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), r
 async def logout(request: Request, response: Response = None, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(get_current_tenant_user)):
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
-        blacklist_token(refresh_token)
+        await blacklist_token(refresh_token)
     response.delete_cookie(key="refresh_token", path="/api/v1/auth/refresh")
     # Blacklist the access token
     credentials = request.headers.get("Authorization", "")
     if credentials.startswith("Bearer "):
-        blacklist_token(credentials[7:])
+        await blacklist_token(credentials[7:])
     await log_audit(db, current_user["org_id"], current_user["user"]["_id"], "logout", "session", current_user["user"]["_id"])
     return {"message": "Logged out"}
 
@@ -149,12 +147,12 @@ async def refresh(request: Request, db: AsyncIOMotorDatabase = Depends(get_db), 
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
 
-    payload = verify_refresh_token(refresh_token)
+    payload = await verify_refresh_token(refresh_token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     # Blacklist the old refresh token before issuing a new one
-    blacklist_token(refresh_token)
+    await blacklist_token(refresh_token)
 
     user = await db["users"].find_one({"_id": payload.get("sub"), "org_id": payload.get("org_id")})
     if not user:
@@ -190,6 +188,8 @@ async def get_me(current_user: dict = Depends(get_current_tenant_user), db: Asyn
 @router.post("/invite")
 @limiter.limit("3/minute")
 async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin"))):
+    if req.role not in ["Operator"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot invite users with that role")
     org_id = current_user["org_id"]
     invited = []
     for email in req.emails:
@@ -204,13 +204,13 @@ async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db),
             "email": email,
             "full_name": email.split("@")[0].title(),
             "hashed_password": pwd.hash(temp_password),
-            "role": req.role,
+            "role": "Operator",
             "org_id": org_id,
             "is_active": True,
             "created_at": datetime.now(timezone.utc),
         }
         await db["users"].insert_one(new_user)
-        invited.append({"email": email, "status": "invited", "role": req.role})
+        invited.append({"email": email, "status": "invited", "role": "Operator"})
 
     await log_audit(db, org_id, current_user["user"]["_id"], "invite", "organization", org_id, {"invited": req.emails, "role": req.role})
     return {"invited": invited}

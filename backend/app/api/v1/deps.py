@@ -14,7 +14,7 @@ async def get_current_tenant_user(
 ) -> dict:
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = verify_access_token(credentials.credentials)
+    payload = await verify_access_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     user_id = payload.get("sub")
@@ -23,6 +23,9 @@ async def get_current_tenant_user(
     user = await db["users"].find_one({"_id": user_id, "org_id": org_id, "is_active": True})
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # Verify role hasn't changed in the database
+    if user["role"] != role:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     return {"user": user, "org_id": org_id, "role": role}
 
 

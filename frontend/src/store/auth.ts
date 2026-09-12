@@ -20,7 +20,8 @@ export const useAuth = create<AuthState>()((set) => ({
   fetchUser: async () => {
     try {
       const res = await getMe();
-      set({ user: res.data.user, organization: res.data.organization, isAuthenticated: true });
+      const storedToken = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      set({ user: res.data.user, organization: res.data.organization, isAuthenticated: true, accessToken: storedToken });
     } catch { set({ isAuthenticated: false }); }
   },
 

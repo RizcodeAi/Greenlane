@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 
@@ -117,14 +117,17 @@ async def get_dashboard_summary(
 
 @router.get("/dashboard/map-vessels", response_model=List[MapVesselResponse])
 async def get_map_vessels(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    page_size: int = Query(100, ge=1, le=500, description="Items per page"),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin", "Compliance Officer")),
 ):
     """Returns list of vessels with live AIS position mock data."""
     org_id = current_user["org_id"]
 
-    cursor = db["ships"].find({"org_id": org_id})
-    org_ships = await cursor.to_list(length=1000)
+    total = await db["ships"].count_documents({"org_id": org_id})
+    cursor = db["ships"].find({"org_id": org_id}).skip(skip).limit(page_size)
+    org_ships = await cursor.to_list(length=page_size)
 
     now = datetime.now(timezone.utc)
     vessels: List[MapVesselResponse] = []
