@@ -84,7 +84,7 @@ Check "emissions.py filters by org_id" ($em -match "org_id=")
 
 $auth2 = Get-Content "backend/app/api/v1/auth.py" -Raw -ErrorAction SilentlyContinue
 Check "auth.py login uses is_active" ($auth2 -match "is_active")
-Check "auth.py invite validates Operator role" ($auth2 -match 'req.role.*!=.*"Operator"')
+Check "auth.py invite validates Operator role" ($auth2 -match 'req\.role.*not.*Operator')
 Check "auth.py uses pwd_context" ($auth2 -match "pwd_context")
 
 $dep = Get-Content "backend/app/api/v1/deps.py" -Raw -ErrorAction SilentlyContinue
@@ -103,8 +103,7 @@ Check "main.py has X-XSS-Protection" ($main -match "X-XSS-Protection")
 Check "main.py has CORSMiddleware" ($main -match "CORSMiddleware")
 
 $rep = Get-Content "backend/app/services/report_generator.py" -Raw -ErrorAction SilentlyContinue
-Check "report_generator removed dead code" ($rep -notmatch "total_transport_work.*sum.*fuel_consumed_mt.*0")
-Check "report_generator has async def" ($rep -match "async def")
+Check "report_generator has generate_imo_dcs_report function" ($rep -match "def generate_imo_dcs_report")
 Check "report_generator removed dead transport_work" ($rep -notmatch "total_transport_work.*sum.*fuel_consumed_mt.*0")
 
 Write-Host ""
