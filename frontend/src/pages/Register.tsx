@@ -30,7 +30,7 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      const res = await register({
+      await register({
         email, password, full_name: fullName,
         org_name: orgName, industry,
         invite_emails: inviteEmails ? inviteEmails.split(',').map(e => e.trim()).filter(Boolean) : undefined,
