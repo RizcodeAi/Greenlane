@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+*.pyc
+__pycache__
+node_modules
+dist
+.dockerenv
+*.md
+.audit_report.md

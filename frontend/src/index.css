@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'leaflet/dist/leaflet.css';
+
+:root {
+  --color-primary: #1A3A5C;
+  --color-accent: #16A34A;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+/* Fix Leaflet marker icons in dark mode */
+.leaflet-marker-icon {
+  filter: none;
+}

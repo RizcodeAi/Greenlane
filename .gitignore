@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+.env.example
+*.secret
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.db
+*.sqlite
+
+# Reports storage
+backend/app/reports_storage/
+
+# Test coverage
+coverage/
+htmlcov/
+*.coverage
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Logs
+*.log
+logs/
+
+# Misc
+*.pem
+*.key
+certs/
