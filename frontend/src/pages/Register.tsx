@@ -35,7 +35,6 @@ export default function Register() {
         org_name: orgName, industry,
         invite_emails: inviteEmails ? inviteEmails.split(',').map(e => e.trim()).filter(Boolean) : undefined,
       });
-      const { access_token } = res.data;
       const userRes = await getMe();
       authLogin(userRes.data.user, userRes.data.organization);
       navigate('/dashboard');

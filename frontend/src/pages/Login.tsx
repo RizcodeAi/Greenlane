@@ -17,7 +17,6 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await login({ email, password });
-      const { access_token } = res.data;
       const userRes = await getMe();
       authLogin(userRes.data.user, userRes.data.organization);
       navigate('/dashboard');
