@@ -11,7 +11,7 @@ client = AsyncIOMotorClient(
     serverSelectionTimeoutMS=10000,
     replicaSet=settings.MONGODB_REPLICA_SET,
     w="majority",
-    j=True,
+    journal=True,
     readPreference="secondaryPreferred",
     retryWrites=True,
 )
