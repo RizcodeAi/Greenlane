@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
 
@@ -65,6 +65,33 @@ class VoyageBase(BaseModel):
     distance_nm: float
     cargo_mt: Optional[float] = 0.0
 
+    @field_validator("fuel_consumed_mt")
+    @classmethod
+    def fuel_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("fuel_consumed_mt must be greater than 0")
+        return v
+
+    @field_validator("distance_nm")
+    @classmethod
+    def distance_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("distance_nm must be greater than 0")
+        return v
+
+    @field_validator("cargo_mt")
+    @classmethod
+    def cargo_must_be_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("cargo_mt cannot be negative")
+        return v
+
+    @model_validator(mode="after")
+    def arrival_after_departure(self):
+        if self.arrival_date and self.departure_date and self.arrival_date <= self.departure_date:
+            raise ValueError("arrival_date must be after departure_date")
+        return self
+
 
 class VoyageCreate(VoyageBase):
     pass
@@ -79,6 +106,33 @@ class VoyageUpdate(BaseModel):
     fuel_consumed_mt: Optional[float] = None
     distance_nm: Optional[float] = None
     cargo_mt: Optional[float] = None
+
+    @field_validator("fuel_consumed_mt")
+    @classmethod
+    def fuel_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("fuel_consumed_mt must be greater than 0")
+        return v
+
+    @field_validator("distance_nm")
+    @classmethod
+    def distance_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("distance_nm must be greater than 0")
+        return v
+
+    @field_validator("cargo_mt")
+    @classmethod
+    def cargo_must_be_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("cargo_mt cannot be negative")
+        return v
+
+    @model_validator(mode="after")
+    def arrival_after_departure(self):
+        if self.arrival_date and self.departure_date and self.arrival_date <= self.departure_date:
+            raise ValueError("arrival_date must be after departure_date")
+        return self
 
 
 class Voyage(VoyageBase):
