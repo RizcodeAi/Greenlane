@@ -208,7 +208,7 @@ async def update_report_status(
 
     old_status = report.get("status", "Draft")
     await db["reports"].update_one(
-        {"_id": ObjectId(report_id)},
+        {"_id": ObjectId(report_id), "org_id": org_id},
         {"$set": {"status": new_status}},
     )
 

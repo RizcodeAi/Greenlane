@@ -193,7 +193,7 @@ async def update_ship(
                      ["name", "flag_state", "vessel_type", "gross_tonnage", "dwt", "fuel_type", "status", "imo_number"]}
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    await db["ships"].update_one({"_id": ObjectId(ship_id)}, {"$set": update_fields})
+    await db["ships"].update_one({"_id": ObjectId(ship_id), "org_id": org_id}, {"$set": update_fields})
 
     updated_ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
     updated_ship["_id"] = str(updated_ship["_id"])
@@ -222,7 +222,7 @@ async def delete_ship(
 
     deleted_at = datetime.now(timezone.utc)
     await db["ships"].update_one(
-        {"_id": ObjectId(ship_id)},
+        {"_id": ObjectId(ship_id), "org_id": org_id},
         {"$set": {"is_deleted": True, "deleted_at": deleted_at}},
     )
 
