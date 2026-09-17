@@ -22,7 +22,7 @@ jobs:
         ports:
           - 27017:27017
         options: >-
-          --auth
+
           --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
           --health-interval 10s
           --health-timeout 5s
@@ -67,6 +67,8 @@ jobs:
           MONGODB_URL: mongodb://localhost:27017
           MONGO_INITDB_ROOT_USERNAME: root
           MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+          JWT_SECRET: test1234
+          REFRESH_SECRET: test1234
         run: |
           cd backend
           pytest --cov=app --cov-report=xml --cov-report=term-missing -v
@@ -94,7 +96,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd frontend
-          npm ci
+          npm ci --legacy-peer-deps
 
       - name: Type check
         run: |
@@ -114,7 +116,7 @@ jobs:
       - name: Unit tests
         run: |
           cd frontend
-          npm run test -- --coverage --reporters=default --reporters=jest-junit
+          npm run test -- --coverage --reporter=default --reporter=jest-junit
 
   # ============================================================
   # Security Scan

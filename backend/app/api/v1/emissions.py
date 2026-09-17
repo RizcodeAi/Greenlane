@@ -234,7 +234,7 @@ async def update_voyage(
             update_fields = {k: v for k, v in update_dict.items() if k in allowed_fields}
             update_fields["updated_at"] = datetime.now(timezone.utc)
 
-            await db["voyages"].update_one({"_id": ObjectId(voyage_id)}, {"$set": update_fields}, session=session)
+            await db["voyages"].update_one({"_id": ObjectId(voyage_id), "org_id": org_id}, {"$set": update_fields}, session=session)
 
             # Fetch updated voyage
             updated_voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id}, session=session)
@@ -287,7 +287,7 @@ async def delete_voyage(
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
-    await db["voyages"].delete_one({"_id": ObjectId(voyage_id)})
+    await db["voyages"].delete_one({"_id": ObjectId(voyage_id), "org_id": org_id})
     await db["emissions_computed"].delete_many({"voyage_id": voyage_id, "org_id": org_id})
 
     await log_audit(
