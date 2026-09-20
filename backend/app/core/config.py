@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     MONGODB_REPLICA_SET: str = "rs0"
     DATABASE_NAME: str = "greenlane_db"
     REDIS_URL: str = "redis://localhost:6379"
+    SENTRY_DSN: str | None = None
 
     JWT_SECRET: str
     REFRESH_SECRET: str

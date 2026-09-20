@@ -2,6 +2,9 @@ from app.api.v1.auth import limiter
 from datetime import datetime, timezone
 from typing import Optional
 import re
+from fastapi.responses import StreamingResponse
+import csv
+import io
 from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
@@ -245,3 +248,42 @@ async def delete_ship(request: Request,
     )
 
     return {"message": "Ship soft deleted successfully"}
+@router.get("/ships/export/csv")
+@limiter.limit('10/minute')
+async def export_ships_csv(request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(get_current_tenant_user),
+):
+    """Export fleet to CSV format."""
+    org_id = current_user["org_id"]
+    cursor = db["ships"].find({"org_id": org_id, "is_deleted": False}).sort("created_at", -1)
+    ships = await cursor.to_list(length=10000)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow(["IMO Number", "Name", "Flag State", "Vessel Type", "Gross Tonnage", "DWT", "Fuel Type", "Status", "Compliance Status", "Created At"])
+
+    # Rows
+    for ship in ships:
+        writer.writerow([
+            ship.get("imo_number", ""),
+            ship.get("name", ""),
+            ship.get("flag_state", ""),
+            ship.get("vessel_type", ""),
+            ship.get("gross_tonnage", ""),
+            ship.get("dwt", ""),
+            ship.get("fuel_type", ""),
+            ship.get("status", ""),
+            ship.get("compliance_status", "Compliant"),
+            ship.get("created_at", "").isoformat() if isinstance(ship.get("created_at"), datetime) else ship.get("created_at", "")
+        ])
+
+    output.seek(0)
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=fleet_export.csv"}
+    )
