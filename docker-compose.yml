@@ -3,7 +3,7 @@ version: "3.9"
 services:
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -37,7 +37,7 @@ services:
 
   celery:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     environment:
       - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
