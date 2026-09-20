@@ -1,9 +1,10 @@
+from app.api.v1.auth import limiter
 """Emissions API router for voyage logging and analytics."""
 
 from datetime import datetime, timezone
 from typing import Optional
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from app.core.database import get_db, client as motor_client
@@ -28,7 +29,8 @@ def validate_voyage_data(data: dict):
 
 
 @router.post("/voyages", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_voyage(
+@limiter.limit('60/minute')
+async def create_voyage(request: Request,
     voyage_data: VoyageCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin", "Compliance Officer")),
@@ -103,7 +105,8 @@ async def create_voyage(
 
 
 @router.get("/voyages", response_model=dict)
-async def list_voyages(
+@limiter.limit('60/minute')
+async def list_voyages(request: Request,
     asset_id: Optional[str] = Query(None, description="Filter by asset ID"),
     period: Optional[str] = Query(None, description="Filter by period (year or YYYY-MM)"),
     search: Optional[str] = Query(None, description="Search by port names"),
@@ -167,7 +170,8 @@ async def list_voyages(
 
 
 @router.get("/voyages/{voyage_id}", response_model=dict)
-async def get_voyage(
+@limiter.limit('60/minute')
+async def get_voyage(request: Request,
     voyage_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
@@ -195,7 +199,8 @@ async def get_voyage(
 
 
 @router.put("/voyages/{voyage_id}", response_model=dict)
-async def update_voyage(
+@limiter.limit('60/minute')
+async def update_voyage(request: Request,
     voyage_id: str,
     update_data: VoyageUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -275,7 +280,8 @@ async def update_voyage(
 
 
 @router.delete("/voyages/{voyage_id}", response_model=dict)
-async def delete_voyage(
+@limiter.limit('60/minute')
+async def delete_voyage(request: Request,
     voyage_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Fleet Manager", "Org Admin")),
@@ -300,7 +306,8 @@ async def delete_voyage(
 
 
 @router.get("/summary", response_model=dict)
-async def get_emissions_summary(
+@limiter.limit('60/minute')
+async def get_emissions_summary(request: Request,
     period: str = Query("month", description="Time period: month, quarter, year"),
     group_by: str = Query("vessel", description="Group by vessel or fuel_type"),
     db: AsyncIOMotorDatabase = Depends(get_db),

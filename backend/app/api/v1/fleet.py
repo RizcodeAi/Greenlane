@@ -1,7 +1,8 @@
+from app.api.v1.auth import limiter
 from datetime import datetime, timezone
 from typing import Optional
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
@@ -41,7 +42,8 @@ def validate_ship_data(data: dict):
 
 
 @router.post("/ships", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_ship(
+@limiter.limit('60/minute')
+async def create_ship(request: Request,
     ship_data: ShipCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Fleet Manager", "Org Admin")),
@@ -85,7 +87,8 @@ async def create_ship(
 
 
 @router.get("/ships", response_model=dict)
-async def list_ships(
+@limiter.limit('60/minute')
+async def list_ships(request: Request,
     search: Optional[str] = Query(None, description="Search by ship name or IMO number"),
     vessel_type: Optional[str] = Query(None, description="Filter by vessel type"),
     fuel_type: Optional[str] = Query(None, description="Filter by fuel type"),
@@ -137,7 +140,8 @@ async def list_ships(
 
 
 @router.get("/ships/{ship_id}", response_model=dict)
-async def get_ship(
+@limiter.limit('60/minute')
+async def get_ship(request: Request,
     ship_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
@@ -154,7 +158,8 @@ async def get_ship(
 
 
 @router.put("/ships/{ship_id}", response_model=dict)
-async def update_ship(
+@limiter.limit('60/minute')
+async def update_ship(request: Request,
     ship_id: str,
     update_data: ShipUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -209,7 +214,8 @@ async def update_ship(
 
 
 @router.delete("/ships/{ship_id}", response_model=dict)
-async def delete_ship(
+@limiter.limit('60/minute')
+async def delete_ship(request: Request,
     ship_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Org Admin")),

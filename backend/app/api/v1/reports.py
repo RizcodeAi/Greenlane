@@ -1,8 +1,9 @@
+from app.api.v1.auth import limiter
 """Report API router for IMO DCS compliance reports."""
 
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
@@ -22,14 +23,16 @@ VALID_STATUSES = {"Draft", "Generated", "Submitted"}
 
 
 @router.post("/reports/generate", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit('60/minute')
 async def generate_report(
-    request: ReportCreate,
+    request: Request,
+    payload: ReportCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Compliance Officer", "Org Admin")),
 ):
     """Queue an IMO DCS Annual Compliance Report for background generation."""
     org_id = current_user["org_id"]
-    year = request.year
+    year = payload.year
 
     if not isinstance(year, int) or year < 2000 or year > 2100:
         raise HTTPException(
@@ -122,7 +125,8 @@ async def generate_report(
 
 
 @router.get("/reports", response_model=dict)
-async def list_reports(
+@limiter.limit('60/minute')
+async def list_reports(request: Request,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
 ):
@@ -140,7 +144,8 @@ async def list_reports(
 
 
 @router.get("/reports/{report_id}", response_model=dict)
-async def get_report(
+@limiter.limit('60/minute')
+async def get_report(request: Request,
     report_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
@@ -159,7 +164,8 @@ async def get_report(
 
 
 @router.get("/reports/{report_id}/download")
-async def download_report(
+@limiter.limit('60/minute')
+async def download_report(request: Request,
     report_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
@@ -186,7 +192,8 @@ async def download_report(
 
 
 @router.patch("/reports/{report_id}/status")
-async def update_report_status(
+@limiter.limit('60/minute')
+async def update_report_status(request: Request,
     report_id: str,
     status_data: ReportStatusUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
