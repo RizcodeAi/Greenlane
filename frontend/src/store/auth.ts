@@ -1,8 +1,12 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
 import { User, Organization, AuthState } from '../types';
 import { getMe, logout as apiLogout, refreshToken as apiRefreshToken } from '../services/api';
 
-export const useAuth = create<AuthState>()((set) => ({
+export const useAuth = create<AuthState>()(
+  persist(
+    (set) => ({
   user: null,
   organization: null,
   isAuthenticated: false,
@@ -32,4 +36,7 @@ export const useAuth = create<AuthState>()((set) => ({
       return null;
     }
   },
-}));
+    }),
+    { name: 'auth-storage' }
+  )
+);

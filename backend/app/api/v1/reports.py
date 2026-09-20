@@ -7,6 +7,7 @@ from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from bson.errors import InvalidId
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -18,6 +19,13 @@ from app.api.v1.deps import get_current_tenant_user, require_role
 from app.tasks.report_tasks import generate_report_task
 
 router = APIRouter()
+
+def validate_object_id(id_str: str):
+    try:
+        return ObjectId(id_str)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
 
 VALID_STATUSES = {"Draft", "Generated", "Submitted"}
 
@@ -152,7 +160,7 @@ async def get_report(request: Request,
 ):
     """Get report details."""
     org_id = current_user["org_id"]
-    report = await db["reports"].find_one({"_id": ObjectId(report_id), "org_id": org_id})
+    report = await db["reports"].find_one({"_id": validate_object_id(report_id), "org_id": org_id})
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
@@ -172,7 +180,7 @@ async def download_report(request: Request,
 ):
     """Download the generated PDF file."""
     org_id = current_user["org_id"]
-    report = await db["reports"].find_one({"_id": ObjectId(report_id), "org_id": org_id})
+    report = await db["reports"].find_one({"_id": validate_object_id(report_id), "org_id": org_id})
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
@@ -209,13 +217,13 @@ async def update_report_status(request: Request,
             detail=f"status must be one of: {', '.join(sorted(VALID_STATUSES))}",
         )
 
-    report = await db["reports"].find_one({"_id": ObjectId(report_id), "org_id": org_id})
+    report = await db["reports"].find_one({"_id": validate_object_id(report_id), "org_id": org_id})
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     old_status = report.get("status", "Draft")
     await db["reports"].update_one(
-        {"_id": ObjectId(report_id), "org_id": org_id},
+        {"_id": validate_object_id(report_id), "org_id": org_id},
         {"$set": {"status": new_status}},
     )
 

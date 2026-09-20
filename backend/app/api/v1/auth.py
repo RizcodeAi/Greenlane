@@ -7,6 +7,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from bson import ObjectId
+from bson.errors import InvalidId
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -23,6 +24,13 @@ from slowapi.util import get_remote_address
 from app.api.v1.deps import get_current_tenant_user, require_role, security
 
 router = APIRouter()
+
+def validate_object_id(id_str: str):
+    try:
+        return ObjectId(id_str)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -64,8 +72,6 @@ async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatab
         "industry": req.industry,
         "created_at": datetime.now(timezone.utc),
     }
-    await db["organizations"].insert_one(org)
-
     hashed = pwd_context.hash(req.password)
     user = {
         "_id": str(ObjectId()),
@@ -77,7 +83,13 @@ async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatab
         "is_active": True,
         "created_at": datetime.now(timezone.utc),
     }
-    await db["users"].insert_one(user)
+
+    try:
+        await db["organizations"].insert_one(org)
+        await db["users"].insert_one(user)
+    except Exception as e:
+        await db["organizations"].delete_one({"_id": org_id})
+        raise HTTPException(status_code=500, detail="Registration failed, rolled back.")
 
     if req.invite_emails:
         for email in req.invite_emails:

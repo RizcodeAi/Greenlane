@@ -7,6 +7,7 @@ import re
 from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from bson.errors import InvalidId
 from app.core.database import get_db, client as motor_client
 from app.core.security import verify_access_token
 from app.services.audit_log import log_audit
@@ -15,6 +16,13 @@ from app.models.schemas import VoyageCreate, VoyageUpdate
 from app.api.v1.deps import get_current_tenant_user, require_role
 
 router = APIRouter()
+
+def validate_object_id(id_str: str):
+    try:
+        return ObjectId(id_str)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
 
 VALID_FUEL_TYPES = {"HFO", "MGO", "LNG", "Methanol"}
 
@@ -179,7 +187,7 @@ async def get_voyage(request: Request,
     """Get single voyage detail + emissions calculation history."""
     org_id = current_user["org_id"]
 
-    voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
+    voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
@@ -210,7 +218,7 @@ async def update_voyage(request: Request,
     org_id = current_user["org_id"]
     validate_voyage_data(update_data.model_dump())
 
-    voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
+    voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
@@ -239,10 +247,10 @@ async def update_voyage(request: Request,
             update_fields = {k: v for k, v in update_dict.items() if k in allowed_fields}
             update_fields["updated_at"] = datetime.now(timezone.utc)
 
-            await db["voyages"].update_one({"_id": ObjectId(voyage_id), "org_id": org_id}, {"$set": update_fields}, session=session)
+            await db["voyages"].update_one({"_id": validate_object_id(voyage_id), "org_id": org_id}, {"$set": update_fields}, session=session)
 
             # Fetch updated voyage
-            updated_voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id}, session=session)
+            updated_voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id}, session=session)
             updated_voyage["_id"] = str(updated_voyage["_id"])
             updated_voyage["id"] = updated_voyage.pop("_id")
 
@@ -289,11 +297,11 @@ async def delete_voyage(request: Request,
     """Delete voyage log. Audit logged."""
     org_id = current_user["org_id"]
 
-    voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
+    voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
-    await db["voyages"].delete_one({"_id": ObjectId(voyage_id), "org_id": org_id})
+    await db["voyages"].delete_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
     await db["emissions_computed"].delete_many({"voyage_id": voyage_id, "org_id": org_id})
 
     await log_audit(
