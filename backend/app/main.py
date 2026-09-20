@@ -50,17 +50,6 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-
-# Initialize Sentry if DSN is provided
-if hasattr(settings, 'SENTRY_DSN') and getattr(settings, 'SENTRY_DSN'):
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        enable_tracing=True,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
-        environment=settings.ENVIRONMENT,
-    )
-
 app = FastAPI(
     title="GreenLane API",
     description="Fleet emissions tracking and management platform",

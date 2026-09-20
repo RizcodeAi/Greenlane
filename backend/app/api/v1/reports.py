@@ -1,13 +1,11 @@
-from app.api.v1.auth import limiter
 """Report API router for IMO DCS compliance reports."""
 
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
-from bson.errors import InvalidId
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -20,27 +18,18 @@ from app.tasks.report_tasks import generate_report_task
 
 router = APIRouter()
 
-def validate_object_id(id_str: str):
-    try:
-        return ObjectId(id_str)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-
-
 VALID_STATUSES = {"Draft", "Generated", "Submitted"}
 
 
 @router.post("/reports/generate", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit('60/minute')
 async def generate_report(
-    request: Request,
-    payload: ReportCreate,
+    request: ReportCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Compliance Officer", "Org Admin")),
 ):
     """Queue an IMO DCS Annual Compliance Report for background generation."""
     org_id = current_user["org_id"]
-    year = payload.year
+    year = request.year
 
     if not isinstance(year, int) or year < 2000 or year > 2100:
         raise HTTPException(
@@ -133,8 +122,7 @@ async def generate_report(
 
 
 @router.get("/reports", response_model=dict)
-@limiter.limit('60/minute')
-async def list_reports(request: Request,
+async def list_reports(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
 ):
@@ -152,15 +140,14 @@ async def list_reports(request: Request,
 
 
 @router.get("/reports/{report_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def get_report(request: Request,
+async def get_report(
     report_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
 ):
     """Get report details."""
     org_id = current_user["org_id"]
-    report = await db["reports"].find_one({"_id": validate_object_id(report_id), "org_id": org_id})
+    report = await db["reports"].find_one({"_id": ObjectId(report_id), "org_id": org_id})
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
@@ -172,15 +159,14 @@ async def get_report(request: Request,
 
 
 @router.get("/reports/{report_id}/download")
-@limiter.limit('60/minute')
-async def download_report(request: Request,
+async def download_report(
     report_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
 ):
     """Download the generated PDF file."""
     org_id = current_user["org_id"]
-    report = await db["reports"].find_one({"_id": validate_object_id(report_id), "org_id": org_id})
+    report = await db["reports"].find_one({"_id": ObjectId(report_id), "org_id": org_id})
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
@@ -200,8 +186,7 @@ async def download_report(request: Request,
 
 
 @router.patch("/reports/{report_id}/status")
-@limiter.limit('60/minute')
-async def update_report_status(request: Request,
+async def update_report_status(
     report_id: str,
     status_data: ReportStatusUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -217,13 +202,13 @@ async def update_report_status(request: Request,
             detail=f"status must be one of: {', '.join(sorted(VALID_STATUSES))}",
         )
 
-    report = await db["reports"].find_one({"_id": validate_object_id(report_id), "org_id": org_id})
+    report = await db["reports"].find_one({"_id": ObjectId(report_id), "org_id": org_id})
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     old_status = report.get("status", "Draft")
     await db["reports"].update_one(
-        {"_id": validate_object_id(report_id), "org_id": org_id},
+        {"_id": ObjectId(report_id)},
         {"$set": {"status": new_status}},
     )
 

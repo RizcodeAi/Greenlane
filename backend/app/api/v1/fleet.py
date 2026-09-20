@@ -1,15 +1,10 @@
-from app.api.v1.auth import limiter
 from datetime import datetime, timezone
 from typing import Optional
 import re
-from fastapi.responses import StreamingResponse
-import csv
-import io
-from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from bson.errors import InvalidId
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -19,13 +14,6 @@ from app.services.audit_log import log_audit
 from app.api.v1.deps import get_current_tenant_user, require_role
 
 router = APIRouter()
-
-def validate_object_id(id_str: str):
-    try:
-        return ObjectId(id_str)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-
 
 # Allowed values validation
 VALID_VESSEL_TYPES = {"Bulk Carrier", "Tanker", "Container", "Ro-Ro", "General Cargo", "Gas Carrier"}
@@ -53,8 +41,7 @@ def validate_ship_data(data: dict):
 
 
 @router.post("/ships", response_model=dict, status_code=status.HTTP_201_CREATED)
-@limiter.limit('60/minute')
-async def create_ship(request: Request,
+async def create_ship(
     ship_data: ShipCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Fleet Manager", "Org Admin")),
@@ -98,8 +85,7 @@ async def create_ship(request: Request,
 
 
 @router.get("/ships", response_model=dict)
-@limiter.limit('60/minute')
-async def list_ships(request: Request,
+async def list_ships(
     search: Optional[str] = Query(None, description="Search by ship name or IMO number"),
     vessel_type: Optional[str] = Query(None, description="Filter by vessel type"),
     fuel_type: Optional[str] = Query(None, description="Filter by fuel type"),
@@ -151,15 +137,14 @@ async def list_ships(request: Request,
 
 
 @router.get("/ships/{ship_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def get_ship(request: Request,
+async def get_ship(
     ship_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
 ):
     """Get detailed info of a single ship owned by the org."""
     org_id = current_user["org_id"]
-    ship = await db["ships"].find_one({"_id": validate_object_id(ship_id), "org_id": org_id, "is_deleted": False})
+    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id, "is_deleted": False})
     if not ship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ship not found")
 
@@ -169,8 +154,7 @@ async def get_ship(request: Request,
 
 
 @router.put("/ships/{ship_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def update_ship(request: Request,
+async def update_ship(
     ship_id: str,
     update_data: ShipUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -190,7 +174,7 @@ async def update_ship(request: Request,
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                           detail=f"Invalid status. Must be one of: {', '.join(sorted(VALID_STATUSES))}")
 
-    ship = await db["ships"].find_one({"_id": validate_object_id(ship_id), "org_id": org_id, "is_deleted": False})
+    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id, "is_deleted": False})
     if not ship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ship not found")
 
@@ -199,7 +183,7 @@ async def update_ship(request: Request,
         existing = await db["ships"].find_one({
             "imo_number": update_data["imo_number"],
             "org_id": org_id,
-            "_id": {"$ne": validate_object_id(ship_id)},
+            "_id": {"$ne": ObjectId(ship_id)},
         })
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
@@ -209,9 +193,9 @@ async def update_ship(request: Request,
                      ["name", "flag_state", "vessel_type", "gross_tonnage", "dwt", "fuel_type", "status", "imo_number"]}
     update_fields["updated_at"] = datetime.now(timezone.utc)
 
-    await db["ships"].update_one({"_id": validate_object_id(ship_id), "org_id": org_id}, {"$set": update_fields})
+    await db["ships"].update_one({"_id": ObjectId(ship_id)}, {"$set": update_fields})
 
-    updated_ship = await db["ships"].find_one({"_id": validate_object_id(ship_id), "org_id": org_id})
+    updated_ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
     updated_ship["_id"] = str(updated_ship["_id"])
     updated_ship["id"] = updated_ship.pop("_id") if isinstance(updated_ship.get("_id"), str) else str(updated_ship.get("_id"))
 
@@ -225,21 +209,20 @@ async def update_ship(request: Request,
 
 
 @router.delete("/ships/{ship_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def delete_ship(request: Request,
+async def delete_ship(
     ship_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Org Admin")),
 ):
     """Soft delete ship (requires Org Admin role). Cascades to voyages."""
     org_id = current_user["org_id"]
-    ship = await db["ships"].find_one({"_id": validate_object_id(ship_id), "org_id": org_id})
+    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
     if not ship:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ship not found")
 
     deleted_at = datetime.now(timezone.utc)
     await db["ships"].update_one(
-        {"_id": validate_object_id(ship_id), "org_id": org_id},
+        {"_id": ObjectId(ship_id)},
         {"$set": {"is_deleted": True, "deleted_at": deleted_at}},
     )
 
@@ -256,44 +239,3 @@ async def delete_ship(request: Request,
     )
 
     return {"message": "Ship soft deleted successfully"}
-@router.get("/ships/export/csv")
-@limiter.limit('10/minute')
-async def export_ships_csv(request: Request,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(get_current_tenant_user),
-):
-    """Export fleet to CSV format."""
-    org_id = current_user["org_id"]
-    cursor = db["ships"].find({"org_id": org_id, "is_deleted": False}).sort("created_at", -1)
-    ships = await cursor.to_list(length=10000)
-
-    def generate_csv():
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["IMO Number", "Name", "Flag State", "Vessel Type", "Gross Tonnage", "DWT", "Fuel Type", "Status", "Compliance Status", "Created At"])
-        yield output.getvalue()
-        output.seek(0)
-        output.truncate(0)
-
-        for ship in ships:
-            writer.writerow([
-                ship.get("imo_number", ""),
-                ship.get("name", ""),
-                ship.get("flag_state", ""),
-                ship.get("vessel_type", ""),
-                ship.get("gross_tonnage", ""),
-                ship.get("dwt", ""),
-                ship.get("fuel_type", ""),
-                ship.get("status", ""),
-                ship.get("compliance_status", "Compliant"),
-                ship.get("created_at", "").isoformat() if isinstance(ship.get("created_at"), datetime) else ship.get("created_at", "")
-            ])
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
-
-    return StreamingResponse(
-        generate_csv(),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=fleet_export.csv"}
-    )

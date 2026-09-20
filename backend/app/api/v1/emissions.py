@@ -1,13 +1,11 @@
-from app.api.v1.auth import limiter
 """Emissions API router for voyage logging and analytics."""
 
 from datetime import datetime, timezone
 from typing import Optional
 import re
-from fastapi import Request, APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
-from bson.errors import InvalidId
 from app.core.database import get_db, client as motor_client
 from app.core.security import verify_access_token
 from app.services.audit_log import log_audit
@@ -16,13 +14,6 @@ from app.models.schemas import VoyageCreate, VoyageUpdate
 from app.api.v1.deps import get_current_tenant_user, require_role
 
 router = APIRouter()
-
-def validate_object_id(id_str: str):
-    try:
-        return ObjectId(id_str)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-
 
 VALID_FUEL_TYPES = {"HFO", "MGO", "LNG", "Methanol"}
 
@@ -37,8 +28,7 @@ def validate_voyage_data(data: dict):
 
 
 @router.post("/voyages", response_model=dict, status_code=status.HTTP_201_CREATED)
-@limiter.limit('60/minute')
-async def create_voyage(request: Request,
+async def create_voyage(
     voyage_data: VoyageCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin", "Compliance Officer")),
@@ -113,8 +103,7 @@ async def create_voyage(request: Request,
 
 
 @router.get("/voyages", response_model=dict)
-@limiter.limit('60/minute')
-async def list_voyages(request: Request,
+async def list_voyages(
     asset_id: Optional[str] = Query(None, description="Filter by asset ID"),
     period: Optional[str] = Query(None, description="Filter by period (year or YYYY-MM)"),
     search: Optional[str] = Query(None, description="Search by port names"),
@@ -178,8 +167,7 @@ async def list_voyages(request: Request,
 
 
 @router.get("/voyages/{voyage_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def get_voyage(request: Request,
+async def get_voyage(
     voyage_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_tenant_user),
@@ -187,7 +175,7 @@ async def get_voyage(request: Request,
     """Get single voyage detail + emissions calculation history."""
     org_id = current_user["org_id"]
 
-    voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
+    voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
@@ -207,8 +195,7 @@ async def get_voyage(request: Request,
 
 
 @router.put("/voyages/{voyage_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def update_voyage(request: Request,
+async def update_voyage(
     voyage_id: str,
     update_data: VoyageUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -218,7 +205,7 @@ async def update_voyage(request: Request,
     org_id = current_user["org_id"]
     validate_voyage_data(update_data.model_dump())
 
-    voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
+    voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
@@ -247,10 +234,10 @@ async def update_voyage(request: Request,
             update_fields = {k: v for k, v in update_dict.items() if k in allowed_fields}
             update_fields["updated_at"] = datetime.now(timezone.utc)
 
-            await db["voyages"].update_one({"_id": validate_object_id(voyage_id), "org_id": org_id}, {"$set": update_fields}, session=session)
+            await db["voyages"].update_one({"_id": ObjectId(voyage_id)}, {"$set": update_fields}, session=session)
 
             # Fetch updated voyage
-            updated_voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id}, session=session)
+            updated_voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id}, session=session)
             updated_voyage["_id"] = str(updated_voyage["_id"])
             updated_voyage["id"] = updated_voyage.pop("_id")
 
@@ -288,8 +275,7 @@ async def update_voyage(request: Request,
 
 
 @router.delete("/voyages/{voyage_id}", response_model=dict)
-@limiter.limit('60/minute')
-async def delete_voyage(request: Request,
+async def delete_voyage(
     voyage_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("Fleet Manager", "Org Admin")),
@@ -297,11 +283,11 @@ async def delete_voyage(request: Request,
     """Delete voyage log. Audit logged."""
     org_id = current_user["org_id"]
 
-    voyage = await db["voyages"].find_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
+    voyage = await db["voyages"].find_one({"_id": ObjectId(voyage_id), "org_id": org_id})
     if not voyage:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voyage not found")
 
-    await db["voyages"].delete_one({"_id": validate_object_id(voyage_id), "org_id": org_id})
+    await db["voyages"].delete_one({"_id": ObjectId(voyage_id)})
     await db["emissions_computed"].delete_many({"voyage_id": voyage_id, "org_id": org_id})
 
     await log_audit(
@@ -314,8 +300,7 @@ async def delete_voyage(request: Request,
 
 
 @router.get("/summary", response_model=dict)
-@limiter.limit('60/minute')
-async def get_emissions_summary(request: Request,
+async def get_emissions_summary(
     period: str = Query("month", description="Time period: month, quarter, year"),
     group_by: str = Query("vessel", description="Group by vessel or fuel_type"),
     db: AsyncIOMotorDatabase = Depends(get_db),

@@ -7,7 +7,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from bson import ObjectId
-from bson.errors import InvalidId
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -24,13 +23,6 @@ from slowapi.util import get_remote_address
 from app.api.v1.deps import get_current_tenant_user, require_role, security
 
 router = APIRouter()
-
-def validate_object_id(id_str: str):
-    try:
-        return ObjectId(id_str)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid ID format")
-
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -72,7 +64,9 @@ async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatab
         "industry": req.industry,
         "created_at": datetime.now(timezone.utc),
     }
-    hashed = pwd_context.hash(req.password)
+    await db["organizations"].insert_one(org)
+
+    hashed = pwd.hash(req.password)
     user = {
         "_id": str(ObjectId()),
         "email": req.email,
@@ -83,13 +77,7 @@ async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatab
         "is_active": True,
         "created_at": datetime.now(timezone.utc),
     }
-
-    try:
-        await db["organizations"].insert_one(org)
-        await db["users"].insert_one(user)
-    except Exception as e:
-        await db["organizations"].delete_one({"_id": org_id})
-        raise HTTPException(status_code=500, detail="Registration failed, rolled back.")
+    await db["users"].insert_one(user)
 
     if req.invite_emails:
         for email in req.invite_emails:
@@ -98,7 +86,7 @@ async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatab
                 "_id": str(ObjectId()),
                 "email": email,
                 "full_name": email.split("@")[0].title(),
-                "hashed_password": pwd_context.hash(invite_temp),
+                "hashed_password": pwd.hash(invite_temp),
                 "role": "Operator",
                 "org_id": org_id,
                 "is_active": True,
@@ -138,7 +126,7 @@ async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatab
 @limiter.limit("5/minute")
 async def login(request: Request, req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
     user = await db["users"].find_one({"email": req.email, "is_active": True})
-    if not user or not pwd_context.verify(req.password, user["hashed_password"]):
+    if not user or not pwd.verify(req.password, user["hashed_password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     access_token = create_access_token(data={"sub": user["_id"], "org_id": user["org_id"], "role": user["role"]})
@@ -244,7 +232,7 @@ async def invite(request: Request, req: InviteRequest, db: AsyncIOMotorDatabase 
             "_id": str(ObjectId()),
             "email": email,
             "full_name": email.split("@")[0].title(),
-            "hashed_password": pwd_context.hash(temp_password),
+            "hashed_password": pwd.hash(temp_password),
             "role": "Operator",
             "org_id": org_id,
             "is_active": True,
