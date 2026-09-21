@@ -3,19 +3,19 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 COPY . .
 RUN npm run build
 
 FROM nginx:alpine AS production
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /app/dist
+COPY nginx.conf /etc/nginx/nginx.conf
 
-EXPOSE 80
+EXPOSE 5173
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost/health || exit 1
+  CMD wget -qO- http://localhost:5173/health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
