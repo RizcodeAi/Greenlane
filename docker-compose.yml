@@ -23,7 +23,7 @@ services:
       mongo-3:
         condition: service_healthy
       redis:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     deploy:
