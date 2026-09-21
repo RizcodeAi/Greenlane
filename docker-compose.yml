@@ -3,7 +3,7 @@ version: "3.9"
 services:
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -23,7 +23,7 @@ services:
       mongo-3:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     deploy:
@@ -37,7 +37,7 @@ services:
 
   celery:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     environment:
       - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
@@ -55,7 +55,7 @@ services:
       mongo-3:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     command: celery -A app.tasks.celery_app worker --loglevel=info
     deploy:
