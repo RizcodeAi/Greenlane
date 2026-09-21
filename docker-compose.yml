@@ -71,6 +71,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: greenlane-frontend:v2
+    command: nginx -g 'daemon off;'
     ports:
       - "5173:5173"
     depends_on:
