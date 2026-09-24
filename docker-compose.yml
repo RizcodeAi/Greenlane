@@ -3,18 +3,18 @@ version: "3.9"
 services:
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27017,mongo-3:27017/greenlane_db?authSource=admin&replicaSet=rs0
       - MONGODB_REPLICA_SET=rs0
       - DATABASE_NAME=greenlane_db
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - CORS_ORIGINS=\["http://localhost:3000","http://localhost:5173"\]
     depends_on:
       mongo-1:
         condition: service_healthy
@@ -37,16 +37,16 @@ services:
 
   celery:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     environment:
-      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27017,mongo-3:27017/greenlane_db?authSource=admin&replicaSet=rs0
       - MONGODB_REPLICA_SET=rs0
       - DATABASE_NAME=greenlane_db
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - CORS_ORIGINS=\["http://localhost:3000","http://localhost:5173"\]
     depends_on:
       mongo-1:
         condition: service_healthy
@@ -71,15 +71,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: greenlane-frontend:v2
-    command: nginx -g 'daemon off;'
     ports:
       - "5173:5173"
     depends_on:
       - backend
     restart: unless-stopped
+    command: sh -c "npm run build && nginx -g 'daemon off;'"
     volumes:
-      - ./frontend/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/frontend.conf:ro
     deploy:
       resources:
         limits:
@@ -96,7 +95,8 @@ services:
       - "27017:27017"
     volumes:
       - mongo1_data:/data/db
-    command: --replSet rs0 --bind_ip_all
+      - ./keyfile:/data/keyfile:ro
+    command: --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -119,10 +119,11 @@ services:
     image: mongo:7
     hostname: mongo-2
     ports:
-      - "27018:27018"
+      - "27018:27017"
     volumes:
       - mongo2_data:/data/db
-    command: --replSet rs0 --bind_ip_all
+      - ./keyfile:/data/keyfile:ro
+    command: --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -145,10 +146,11 @@ services:
     image: mongo:7
     hostname: mongo-3
     ports:
-      - "27019:27019"
+      - "27019:27017"
     volumes:
       - mongo3_data:/data/db
-    command: --replSet rs0 --bind_ip_all
+      - ./keyfile:/data/keyfile:ro
+    command: --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -168,15 +170,17 @@ services:
           memory: 128M
 
   mongo-init:
+    environment:
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     image: mongo:7
     command: >
       sh -c "
         mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
-        \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27018'},{_id:2,host:'mongo-3:27019'}]})\" &&
+        \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27017'},{_id:2,host:'mongo-3:27017'}]})\" &&
         mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
-        \"rs.add('mongo-2:27018')\" &&
+        \"rs.add('mongo-2:27017')\" &&
         mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
-        \"rs.add('mongo-3:27019')\"
+        \"rs.add('mongo-3:27017')\"
       "
     depends_on:
       mongo-1:
@@ -192,11 +196,6 @@ services:
     volumes:
       - redis_data:/data/db
     command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
     deploy:
       resources:
@@ -214,6 +213,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/frontend.conf:ro
       - ./certs:/etc/nginx/certs:ro
       - ./certs/renewal.sh:/usr/local/bin/renewal.sh:ro
     depends_on:

@@ -62,7 +62,7 @@ async def init_db_indexes(db):
     # voyages: index for org_id + voyage_id on emissions
     await db["emissions_computed"].create_index([("org_id", 1), ("voyage_id", 1)])
     await db["emissions_computed"].create_index([("org_id", 1), ("generated_at", -1)])
-    await db["emissions_computed"].create_index([("voyage_id", 1), ("is_current", 1)], unique=True, partialFilterExpression={"is_current": True})
+    await db["emissions_computed"].create_index([("voyage_id", 1), ("is_current", 1)], unique=True, partialFilterExpression={"is_current": True}, name="voyage_id_1_is_current_1_partial")
 
     # voyages: indexes for created_at (sort) and asset_id (query)
     await db["voyages"].create_index("created_at")
