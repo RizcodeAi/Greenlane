@@ -3,7 +3,7 @@ version: "3.9"
 services:
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -14,7 +14,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=\["http://localhost:3000","http://localhost:5173"\]
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
     depends_on:
       mongo-1:
         condition: service_healthy
@@ -37,7 +37,7 @@ services:
 
   celery:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     environment:
       - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27017,mongo-3:27017/greenlane_db?authSource=admin&replicaSet=rs0
@@ -46,7 +46,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=\["http://localhost:3000","http://localhost:5173"\]
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
     depends_on:
       mongo-1:
         condition: service_healthy
@@ -101,7 +101,7 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
+      test: ["CMD-SHELL", "mongosh --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -128,7 +128,7 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
+      test: ["CMD-SHELL", "mongosh --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -155,7 +155,7 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
+      test: ["CMD-SHELL", "mongosh --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -175,12 +175,8 @@ services:
     image: mongo:7
     command: >
       sh -c "
-        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
-        \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27017'},{_id:2,host:'mongo-3:27017'}]})\" &&
-        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
-        \"rs.add('mongo-2:27017')\" &&
-        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
-        \"rs.add('mongo-3:27017')\"
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval \
+        \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27017'},{_id:2,host:'mongo-3:27017'}]})\"
       "
     depends_on:
       mongo-1:
@@ -197,6 +193,11 @@ services:
       - redis_data:/data/db
     command: redis-server --appendonly yes
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
