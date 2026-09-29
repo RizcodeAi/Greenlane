@@ -95,8 +95,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo1_data:/data/db
-      - ./keyfile:/data/keyfile:ro
-    command: bash -c "cp /data/keyfile /tmp/keyfile && chmod 400 /tmp/keyfile && mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
+    command: bash -c "echo '$${MONGO_INITDB_ROOT_PASSWORD}' > /tmp/keyfile && chmod 400 /tmp/keyfile && mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -122,8 +121,7 @@ services:
       - "27018:27017"
     volumes:
       - mongo2_data:/data/db
-      - ./keyfile:/data/keyfile:ro
-    command: bash -c "cp /data/keyfile /tmp/keyfile && chmod 400 /tmp/keyfile && mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
+    command: bash -c "echo '$${MONGO_INITDB_ROOT_PASSWORD}' > /tmp/keyfile && chmod 400 /tmp/keyfile && mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -149,8 +147,7 @@ services:
       - "27019:27017"
     volumes:
       - mongo3_data:/data/db
-      - ./keyfile:/data/keyfile:ro
-    command: bash -c "cp /data/keyfile /tmp/keyfile && chmod 400 /tmp/keyfile && mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
+    command: bash -c "echo '$${MONGO_INITDB_ROOT_PASSWORD}' > /tmp/keyfile && chmod 400 /tmp/keyfile && mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
