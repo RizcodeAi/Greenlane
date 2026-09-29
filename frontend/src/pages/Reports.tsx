@@ -32,7 +32,7 @@ export default function Reports() {
       setReports(res.reports);
       const c = { Draft: 0, Generated: 0, Submitted: 0 };
       for (const r of res.reports) {
-        if (c.hasOwnProperty(r.status)) {
+        if (Object.prototype.hasOwnProperty.call(c, r.status)) {
           c[r.status as keyof typeof c]++;
         }
       }
