@@ -12,7 +12,7 @@ export const useAuth = create<AuthState>()((set) => ({
   },
 
   logout: async () => {
-    try { await apiLogout(); } catch {}
+    try { await apiLogout(); } catch { /* ignore error during logout */ }
     set({ user: null, organization: null, isAuthenticated: false });
   },
 

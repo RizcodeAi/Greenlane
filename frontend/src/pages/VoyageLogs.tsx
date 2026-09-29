@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../store/auth';
 import { getVoyages, deleteVoyage, createVoyage, Voyage } from '../services/emissions';
 import AddVoyageModal from '../components/AddVoyageModal';
 
 export default function VoyageLogs() {
-  const { } = useAuth();
   const navigate = useNavigate();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [loading, setLoading] = useState(true);
