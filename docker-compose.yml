@@ -14,7 +14,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
       mongo-1:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
       mongo-1:
         condition: service_healthy
@@ -76,7 +76,7 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-    command: sh -c "npm run build && nginx -g 'daemon off;'"
+    command: nginx -g 'daemon off;'
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/conf.d/frontend.conf:ro
     deploy:
@@ -95,13 +95,13 @@ services:
       - "27017:27017"
     volumes:
       - mongo1_data:/data/db
-    command: >
-      bash -c "echo \'${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}\' > /tmp/keyfile && chmod 400 /tmp/keyfile && chown 999:999 /tmp/keyfile && exec /usr/local/bin/docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
+      - mongo_key:/data/keyfile
+    command: bash -c "if [ ! -f /data/keyfile/key ]; then echo '${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}' > /data/keyfile/key; chmod 400 /data/keyfile/key; chown 999:999 /data/keyfile/key; fi; exec docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile/key"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      test: ["CMD-SHELL", "mongosh -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -122,13 +122,13 @@ services:
       - "27018:27017"
     volumes:
       - mongo2_data:/data/db
-    command: >
-      bash -c "echo \'${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}\' > /tmp/keyfile && chmod 400 /tmp/keyfile && chown 999:999 /tmp/keyfile && exec /usr/local/bin/docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
+      - mongo_key:/data/keyfile
+    command: bash -c "if [ ! -f /data/keyfile/key ]; then echo '${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}' > /data/keyfile/key; chmod 400 /data/keyfile/key; chown 999:999 /data/keyfile/key; fi; exec docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile/key"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      test: ["CMD-SHELL", "mongosh -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -149,13 +149,13 @@ services:
       - "27019:27017"
     volumes:
       - mongo3_data:/data/db
-    command: >
-      bash -c "echo \'${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}\' > /tmp/keyfile && chmod 400 /tmp/keyfile && chown 999:999 /tmp/keyfile && exec /usr/local/bin/docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
+      - mongo_key:/data/keyfile
+    command: bash -c "if [ ! -f /data/keyfile/key ]; then echo '${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}' > /data/keyfile/key; chmod 400 /data/keyfile/key; chown 999:999 /data/keyfile/key; fi; exec docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile/key"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      test: ["CMD-SHELL", "mongosh -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -170,12 +170,12 @@ services:
           memory: 128M
 
   mongo-init:
+    image: mongo:7
     environment:
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
-    image: mongo:7
     command: >
       sh -c "
-        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval \
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval
         \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27017'},{_id:2,host:'mongo-3:27017'}]})\"
       "
     depends_on:
@@ -275,6 +275,7 @@ services:
           memory: 64M
 
 volumes:
+  mongo_key:
   mongo1_data:
   mongo2_data:
   mongo3_data:
