@@ -29,7 +29,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
     depends_on:
       mongo-1:
         condition: service_started
@@ -61,7 +61,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - REFRESH_SECRET=${REFRESH_SECRET}
       - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
     depends_on:
       mongo-1:
         condition: service_started
@@ -199,8 +199,11 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     command: >
       sh -c '
-        sleep 5;
-        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval "rs.initiate({_id:\"rs0\", members:[{_id:0,host:\"mongo-1:27017\"},{_id:1,host:\"mongo-2:27017\"},{_id:2,host:\"mongo-3:27017\"}]})"
+        sleep 15;
+        for i in 1 2 3 4 5; do
+          mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval "rs.initiate({_id:\"rs0\", members:[{_id:0,host:\"mongo-1:27017\"},{_id:1,host:\"mongo-2:27017\"},{_id:2,host:\"mongo-3:27017\"}]})" && break;
+          if [ $$i -lt 5 ]; then sleep 5; fi;
+        done
       '
     depends_on:
       mongo-1:
