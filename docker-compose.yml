@@ -8,7 +8,7 @@ services:
     command: >
       sh -c "
         if [ ! -f /data/keyfile/key ]; then
-          cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 1024 > /data/keyfile/key;
+          echo "${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key_that_is_safe_123}" > /data/keyfile/key;
           chmod 400 /data/keyfile/key;
           chown 999:999 /data/keyfile/key;
         fi
