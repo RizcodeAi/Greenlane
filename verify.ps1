@@ -213,7 +213,7 @@ try {
     }
     Check "Last commit mentions 6th pass" ($gl -match "6th pass")
     Check "AUDIT_REPORT.md in git history" ($gl -match "AUDIT")
-    Check "All commits on main" \(\(git branch --show-current 2>\&1\) -match "fix"")
+    Check "All commits on main" ((git branch --show-current 2>&1) -match "main")
 } catch {
     Write-Host "[FAIL] git not available" -ForegroundColor Red
     $fail++
