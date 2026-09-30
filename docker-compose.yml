@@ -32,13 +32,13 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
       mongo-1:
-        condition: service_healthy
+        condition: service_started
       mongo-2:
-        condition: service_healthy
+        condition: service_started
       mongo-3:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     deploy:
@@ -64,13 +64,13 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
       mongo-1:
-        condition: service_healthy
+        condition: service_started
       mongo-2:
-        condition: service_healthy
+        condition: service_started
       mongo-3:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     command: celery -A app.tasks.celery_app worker --loglevel=info
     deploy:
@@ -204,11 +204,11 @@ services:
       "
     depends_on:
       mongo-1:
-        condition: service_healthy
+        condition: service_started
       mongo-2:
-        condition: service_healthy
+        condition: service_started
       mongo-3:
-        condition: service_healthy
+        condition: service_started
     restart: "no"
 
   redis:
