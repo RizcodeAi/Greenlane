@@ -1,6 +1,21 @@
 version: "3.9"
 
 services:
+  keyfile-init:
+    image: busybox
+    environment:
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    command: >
+      sh -c "
+        if [ ! -f /data/keyfile/key ]; then
+          echo \"${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}\" > /data/keyfile/key;
+          chmod 400 /data/keyfile/key;
+          chown 999:999 /data/keyfile/key;
+        fi
+      "
+    volumes:
+      - mongo_key:/data/keyfile
+
   backend:
     build:
       context: ./backend
@@ -95,8 +110,11 @@ services:
       - "27017:27017"
     volumes:
       - mongo1_data:/data/db
-      - mongo_key:/data/keyfile
-    command: bash -c "if [ ! -f /data/keyfile/key ]; then echo '${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}' > /data/keyfile/key; chmod 400 /data/keyfile/key; chown 999:999 /data/keyfile/key; fi; exec docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile/key"
+      - mongo_key:/data/keyfile:ro
+    command: ["--auth", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/key"]
+    depends_on:
+      keyfile-init:
+        condition: service_completed_successfully
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -122,8 +140,11 @@ services:
       - "27018:27017"
     volumes:
       - mongo2_data:/data/db
-      - mongo_key:/data/keyfile
-    command: bash -c "if [ ! -f /data/keyfile/key ]; then echo '${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}' > /data/keyfile/key; chmod 400 /data/keyfile/key; chown 999:999 /data/keyfile/key; fi; exec docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile/key"
+      - mongo_key:/data/keyfile:ro
+    command: ["--auth", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/key"]
+    depends_on:
+      keyfile-init:
+        condition: service_completed_successfully
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
@@ -149,8 +170,11 @@ services:
       - "27019:27017"
     volumes:
       - mongo3_data:/data/db
-      - mongo_key:/data/keyfile
-    command: bash -c "if [ ! -f /data/keyfile/key ]; then echo '${MONGO_INITDB_ROOT_PASSWORD:-default_secret_key}' > /data/keyfile/key; chmod 400 /data/keyfile/key; chown 999:999 /data/keyfile/key; fi; exec docker-entrypoint.sh mongod --auth --replSet rs0 --bind_ip_all --keyFile /data/keyfile/key"
+      - mongo_key:/data/keyfile:ro
+    command: ["--auth", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/key"]
+    depends_on:
+      keyfile-init:
+        condition: service_completed_successfully
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
