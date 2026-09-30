@@ -148,7 +148,7 @@ Write-Host ""
 Write-Host "-- SECTION 6: Code Compilation --" -ForegroundColor Yellow
 try {
     if (Test-Path "frontend/node_modules/.bin/tsc") {
-        $r = & sh -c "cd /d frontend && npx tsc --noEmit 2>&1" 2>&1
+        $r = & cmd /c "cd /d frontend && npx tsc --noEmit 2>&1" 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[PASS] TypeScript compiles cleanly" -ForegroundColor Green
             $pass++
@@ -167,7 +167,7 @@ try {
 $pyOk = $true
 foreach ($f in @("app/main.py","app/core/security.py","app/core/config.py","app/api/v1/emissions.py","app/api/v1/auth.py","app/api/v1/deps.py","app/api/v1/fleet.py","app/services/report_generator.py")) {
     try {
-        $pr = & sh -c "cd /d backend && python -m py_compile $f 2>&1" 2>&1
+        $pr = & cmd /c "cd /d backend && python -m py_compile $f 2>&1" 2>&1
         if ($LASTEXITCODE -ne 0) { $pyOk = $false }
     } catch { $pyOk = $false }
 }
@@ -230,15 +230,15 @@ Check "AUDIT_REPORT.md has commit refs" ($audit -match "commit [a-f0-9]")
 
 Write-Host ""
 Write-Host "-- SECTION 10: Environment --" -ForegroundColor Yellow
-$nv = & sh -c "node --version 2>&1" 2>&1
+$nv = & cmd /c "node --version 2>&1" 2>&1
 Check "Node.js installed" ($nv -match "v\d+")
-$np = & sh -c "npm --version 2>&1" 2>&1
+$np = & cmd /c "npm --version 2>&1" 2>&1
 Check "npm installed" ($np -match "\d+")
-$pv = & sh -c "python --version 2>&1" 2>&1
+$pv = & cmd /c "python --version 2>&1" 2>&1
 Check "Python installed" ($pv -match "\d+")
-$dv = & sh -c "docker --version 2>&1" 2>&1
+$dv = & cmd /c "docker --version 2>&1" 2>&1
 Check "Docker installed" ($dv -match "Docker")
-$gv = & sh -c "git --version 2>&1" 2>&1
+$gv = & cmd /c "git --version 2>&1" 2>&1
 Check "Git installed" ($gv -match "git")
 
 Write-Host ""
