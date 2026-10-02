@@ -4,7 +4,7 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     MONGODB_URL: str = "mongodb://localhost:27017"
     MONGODB_REPLICA_SET: str = "rs0"
