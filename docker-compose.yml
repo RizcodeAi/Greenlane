@@ -1,29 +1,14 @@
 version: "3.9"
 
 services:
-  keyfile-init:
-    image: busybox
-    environment:
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
-    command: >
-      sh -c "
-        if [ ! -f /data/keyfile/key ]; then
-          cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1 | base64 > /data/keyfile/key;
-          chmod 400 /data/keyfile/key;
-          chown 999:999 /data/keyfile/key;
-        fi
-      "
-    volumes:
-      - mongo_key:/data/keyfile
-
   backend:
     build:
-      context: ./backend
-      dockerfile: ./Dockerfile
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27017,mongo-3:27017/greenlane_db?authSource=admin&replicaSet=rs0
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
       - MONGODB_REPLICA_SET=rs0
       - DATABASE_NAME=greenlane_db
       - JWT_SECRET=${JWT_SECRET}
@@ -32,13 +17,13 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
       mongo-1:
-        condition: service_started
+        condition: service_healthy
       mongo-2:
-        condition: service_started
+        condition: service_healthy
       mongo-3:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     deploy:
@@ -52,10 +37,10 @@ services:
 
   celery:
     build:
-      context: ./backend
-      dockerfile: ./Dockerfile
+      context: .
+      dockerfile: Dockerfile
     environment:
-      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27017,mongo-3:27017/greenlane_db?authSource=admin&replicaSet=rs0
+      - MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD}@mongo-1:27017,mongo-2:27018,mongo-3:27019/greenlane_db?authSource=admin&replicaSet=rs0
       - MONGODB_REPLICA_SET=rs0
       - DATABASE_NAME=greenlane_db
       - JWT_SECRET=${JWT_SECRET}
@@ -64,13 +49,13 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
     depends_on:
       mongo-1:
-        condition: service_started
+        condition: service_healthy
       mongo-2:
-        condition: service_started
+        condition: service_healthy
       mongo-3:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     command: celery -A app.tasks.celery_app worker --loglevel=info
     deploy:
@@ -85,15 +70,14 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: ./Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "5173:5173"
     depends_on:
       - backend
     restart: unless-stopped
-    command: nginx -g 'daemon off;'
     volumes:
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/frontend.conf:ro
+      - ./frontend/nginx.conf:/etc/nginx/nginx.conf:ro
     deploy:
       resources:
         limits:
@@ -110,16 +94,12 @@ services:
       - "27017:27017"
     volumes:
       - mongo1_data:/data/db
-      - mongo_key:/data/keyfile:ro
-    command: ["--auth", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/key"]
-    depends_on:
-      keyfile-init:
-        condition: service_completed_successfully
+    command: --auth --replSet rs0 --bind_ip_all
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mongosh -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -137,19 +117,15 @@ services:
     image: mongo:7
     hostname: mongo-2
     ports:
-      - "27018:27017"
+      - "27018:27018"
     volumes:
       - mongo2_data:/data/db
-      - mongo_key:/data/keyfile:ro
-    command: ["--auth", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/key"]
-    depends_on:
-      keyfile-init:
-        condition: service_completed_successfully
+    command: --auth --replSet rs0 --bind_ip_all
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mongosh -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -167,19 +143,15 @@ services:
     image: mongo:7
     hostname: mongo-3
     ports:
-      - "27019:27017"
+      - "27019:27019"
     volumes:
       - mongo3_data:/data/db
-      - mongo_key:/data/keyfile:ro
-    command: ["--auth", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/key"]
-    depends_on:
-      keyfile-init:
-        condition: service_completed_successfully
+    command: --auth --replSet rs0 --bind_ip_all
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "mongosh -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --port 27017 --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      test: mongosh --quiet --eval "db.runCommand({ping:1}).ok"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -195,23 +167,22 @@ services:
 
   mongo-init:
     image: mongo:7
-    environment:
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     command: >
-      sh -c '
-        sleep 15;
-        for i in 1 2 3 4 5; do
-          mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval "rs.initiate({_id:\"rs0\", members:[{_id:0,host:\"mongo-1:27017\"},{_id:1,host:\"mongo-2:27017\"},{_id:2,host:\"mongo-3:27017\"}]})" && break;
-          if [ $$i -lt 5 ]; then sleep 5; fi;
-        done
-      '
+      sh -c "
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
+        \"rs.initiate({_id:'rs0', members:[{_id:0,host:'mongo-1:27017'},{_id:1,host:'mongo-2:27018'},{_id:2,host:'mongo-3:27019'}]})\" &&
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
+        \"rs.add('mongo-2:27018')\" &&
+        mongosh --host mongo-1:27017 -u admin -p $${MONGO_INITDB_ROOT_PASSWORD} --eval
+        \"rs.add('mongo-3:27019')\"
+      "
     depends_on:
       mongo-1:
-        condition: service_started
+        condition: service_healthy
       mongo-2:
-        condition: service_started
+        condition: service_healthy
       mongo-3:
-        condition: service_started
+        condition: service_healthy
     restart: "no"
 
   redis:
@@ -220,11 +191,6 @@ services:
       - redis_data:/data/db
     command: redis-server --appendonly yes
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     deploy:
       resources:
         limits:
@@ -241,7 +207,6 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/frontend.conf:ro
       - ./certs:/etc/nginx/certs:ro
       - ./certs/renewal.sh:/usr/local/bin/renewal.sh:ro
     depends_on:
@@ -302,7 +267,6 @@ services:
           memory: 64M
 
 volumes:
-  mongo_key:
   mongo1_data:
   mongo2_data:
   mongo3_data:
