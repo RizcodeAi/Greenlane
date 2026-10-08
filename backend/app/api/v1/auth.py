@@ -52,7 +52,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
+async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
     existing = await db["users"].find_one({"email": req.email})
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -124,7 +124,7 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def login(req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
+async def login(request: Request, req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
     user = await db["users"].find_one({"email": req.email, "is_active": True})
     if not user or not pwd.verify(req.password, user["hashed_password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -217,7 +217,7 @@ async def get_me(current_user: dict = Depends(get_current_tenant_user), db: Asyn
 
 @router.post("/invite")
 @limiter.limit("3/minute")
-async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin")), _= Depends(csrf_protect)):
+async def invite(request: Request, req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin")), _= Depends(csrf_protect)):
     if req.role not in ["Operator"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot invite users with that role")
     org_id = current_user["org_id"]
