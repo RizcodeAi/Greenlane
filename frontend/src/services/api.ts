@@ -48,3 +48,14 @@ export const getMe = () => axiosInstance.get('/auth/me');
 
 export const invite = (emails: string[], role: string) =>
   axiosInstance.post('/auth/invite', { emails, role });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && error.response?.headers?.['x-mfa-required']) {
+      // Custom error flag for MFA
+      error.requiresMFA = true;
+    }
+    return Promise.reject(error);
+  }
+);

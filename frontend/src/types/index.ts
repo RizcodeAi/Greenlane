@@ -46,7 +46,9 @@ export interface AuthState {
   user: User | null;
   organization: Organization | null;
   isAuthenticated: boolean;
+  requireMFA: boolean;
   login: (user: User, organization: Organization) => void;
+  setRequireMFA: (val: boolean) => void;
   logout: () => void;
   fetchUser: () => Promise<void>;
   refreshSession: () => Promise<string | null>;

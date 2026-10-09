@@ -38,6 +38,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    mfa_token: Optional[str] = None
 
 
 class InviteRequest(BaseModel):
@@ -243,3 +244,62 @@ async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db),
 
     await log_audit(db, org_id, current_user["user"]["_id"], "invite", "organization", org_id, {"invited": req.emails, "role": req.role})
     return {"invited": invited}
+
+
+import pyotp
+import qrcode
+import io
+from fastapi.responses import StreamingResponse
+
+class MFAVerifyRequest(BaseModel):
+    token: str
+
+@router.post("/mfa/setup", response_description="Setup MFA")
+async def setup_mfa(
+    request: Request,
+    current_user: dict = Depends(get_current_tenant_user),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    if current_user.get("mfa_enabled"):
+        raise HTTPException(status_code=400, detail="MFA is already enabled")
+
+    secret = pyotp.random_base32()
+
+    # Store secret temporarily (in reality, store unverified secret in DB)
+    await db.users.update_one(
+        {"_id": current_user["_id"]},
+        {"$set": {"mfa_secret_pending": secret}}
+    )
+
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(name=current_user["email"], issuer_name="Greenlane")
+
+    return {"secret": secret, "provisioning_uri": provisioning_uri}
+
+@router.post("/mfa/verify", response_description="Verify MFA")
+@limiter.limit("5/minute")
+async def verify_mfa(
+    request: Request,
+    payload: MFAVerifyRequest,
+    current_user: dict = Depends(get_current_tenant_user),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    user = await db.users.find_one({"_id": current_user["_id"]})
+
+    secret = user.get("mfa_secret") or user.get("mfa_secret_pending")
+    if not secret:
+        raise HTTPException(status_code=400, detail="MFA setup not initiated")
+
+    totp = pyotp.TOTP(secret)
+    if not totp.verify(payload.token):
+        raise HTTPException(status_code=401, detail="Invalid MFA token")
+
+    await db.users.update_one(
+        {"_id": current_user["_id"]},
+        {
+            "$set": {"mfa_enabled": True, "mfa_secret": secret},
+            "$unset": {"mfa_secret_pending": ""}
+        }
+    )
+
+    return {"message": "MFA enabled successfully"}

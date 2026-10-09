@@ -16,3 +16,5 @@ reportlab>=4.0.0
 redis>=5.0.0
 celery[redis]>=5.4.0
 prometheus-client>=0.21.0
+
+pyotp==2.9.0
