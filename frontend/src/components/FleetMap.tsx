@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getMapVessels, MapVessel } from '../services/dashboard';
 import { Viewer, Entity, PointGraphics, } from 'resium';
 import { Cartesian3, Color } from 'cesium';
+import WeatherClouds from './WeatherClouds';
 
 const COMPLIANCE_COLORS: Record<string, Color> = {
   Compliant: Color.LIMEGREEN,
@@ -93,6 +94,7 @@ export default function FleetMap() {
               </Entity>
             );
           })}
+          <WeatherClouds />
         </Viewer>
       </div>
     </div>
