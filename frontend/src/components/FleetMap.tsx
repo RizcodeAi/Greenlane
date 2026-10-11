@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getMapVessels, MapVessel } from '../services/dashboard';
-import { Viewer, Entity, PointGraphics, } from 'resium';
+import { Viewer, Entity, PointGraphics, CameraFlyTo } from 'resium';
 import { Cartesian3, Color } from 'cesium';
 import WeatherClouds from './WeatherClouds';
 
@@ -12,8 +12,11 @@ const COMPLIANCE_COLORS: Record<string, Color> = {
 
 export default function FleetMap() {
   const [vessels, setVessels] = useState<MapVessel[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [flyToCenter, setFlyToCenter] = useState(false);
+
 
   useEffect(() => {
     getMapVessels()
@@ -21,6 +24,16 @@ export default function FleetMap() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const handleCenter = () => {
+      setFlyToCenter(true);
+      setTimeout(() => setFlyToCenter(false), 100);
+    };
+    window.addEventListener('center-fleet', handleCenter);
+    return () => window.removeEventListener('center-fleet', handleCenter);
+  }, []);
+
 
   if (loading) {
     return (
@@ -95,6 +108,7 @@ export default function FleetMap() {
             );
           })}
           <WeatherClouds />
+          {flyToCenter && vessels.length > 0 && <CameraFlyTo destination={Cartesian3.fromDegrees(vessels[0].lng, vessels[0].lat, 5000000)} duration={2.0} />}
         </Viewer>
       </div>
     </div>

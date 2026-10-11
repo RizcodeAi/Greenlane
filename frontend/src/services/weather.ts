@@ -8,6 +8,7 @@ export interface StormData {
   scale_x: number;
   scale_y: number;
   scale_height: number;
+  wind_speed: number;
 }
 
 export const getStorms = () => {
