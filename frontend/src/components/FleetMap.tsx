@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getMapVessels, MapVessel } from '../services/dashboard';
+import { getLiveFleet, LiveVessel } from '../services/tracking';
 import { Viewer, Entity, PointGraphics, CameraFlyTo } from 'resium';
 import { Cartesian3, Color } from 'cesium';
 import WeatherClouds from './WeatherClouds';
@@ -11,7 +11,7 @@ const COMPLIANCE_COLORS: Record<string, Color> = {
 };
 
 export default function FleetMap() {
-  const [vessels, setVessels] = useState<MapVessel[]>([]);
+  const [vessels, setVessels] = useState<LiveVessel[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export default function FleetMap() {
 
 
   useEffect(() => {
-    getMapVessels()
+    getLiveFleet()
       .then((res) => setVessels(res.data))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -81,12 +81,8 @@ export default function FleetMap() {
             const descriptionHtml = `
               <div style="font-family: sans-serif; color: white;">
                   <p><strong>IMO:</strong> ${vessel.imo}</p>
-                  <p><strong>Type:</strong> ${vessel.vessel_type}</p>
-                  <p><strong>Speed:</strong> ${vessel.speed_knots} knots</p>
-                  <p><strong>Heading:</strong> ${vessel.heading_deg}&deg;</p>
-                  <p><strong>Destination:</strong> ${vessel.destination}</p>
-                  <p><strong>Fuel:</strong> ${vessel.fuel_type}</p>
-                  <p><strong>ETA:</strong> ${new Date(vessel.eta).toLocaleString()}</p>
+                  <p><strong>Speed:</strong> ${vessel.speed.toFixed(1)} knots</p>
+                  <p><strong>Heading:</strong> ${vessel.heading.toFixed(1)}&deg;</p>
                   <p><strong>Status:</strong> ${vessel.compliance_status}</p>
               </div>
             `;

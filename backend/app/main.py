@@ -23,6 +23,7 @@ from app.api.v1 import dashboard
 from app.api.v1 import emissions
 from app.api.v1 import reports
 from app.api.v1 import weather
+from app.api.v1 import live_tracking
 from app.tasks.celery_app import celery_app
 
 
@@ -95,6 +96,7 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboar
 app.include_router(emissions.router, prefix="/api/v1/emissions", tags=["Emissions"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 app.include_router(weather.router, prefix="/api/v1/weather", tags=["Weather"])
+app.include_router(live_tracking.router, prefix="/api/v1/tracking", tags=["Live Tracking"])
 
 
 @app.exception_handler(RequestValidationError)
