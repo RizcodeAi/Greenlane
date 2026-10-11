@@ -11,6 +11,35 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _redis_pool: Optional[aioredis.Redis] = None
 
 
+def _create_token(data: dict, secret: str, expires_delta: timedelta, token_type: str) -> str:
+    payload = data.copy()
+    payload.update({
+        "type": token_type,
+        "exp": datetime.now(timezone.utc) + expires_delta,
+        "iat": datetime.now(timezone.utc),
+    })
+    return jwt.encode(payload, secret, algorithm=settings.ALGORITHM)
+
+
+def create_access_token(data: dict) -> str:
+    return _create_token(
+        data,
+        settings.JWT_SECRET,
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        "access",
+    )
+
+
+def create_refresh_token(data: dict) -> str:
+    return _create_token(
+        data,
+        settings.REFRESH_SECRET,
+        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        "refresh",
+    )
+
+
+
 async def get_redis() -> aioredis.Redis:
     global _redis_pool
     if _redis_pool is None or _redis_pool.connection_pool.disconnected:

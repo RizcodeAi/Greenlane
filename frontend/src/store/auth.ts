@@ -6,12 +6,9 @@ export const useAuth = create<AuthState>()((set) => ({
   user: null,
   organization: null,
   isAuthenticated: false,
-  requireMFA: false,
-
-  setRequireMFA: (val: boolean) => set({ requireMFA: val }),
 
   login: (user: User, organization: Organization) => {
-    set({ user, organization, isAuthenticated: true, requireMFA: false });
+    set({ user, organization, isAuthenticated: true });
   },
 
   logout: async () => {

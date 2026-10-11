@@ -150,14 +150,7 @@ class LoggerMiddleware(BaseHTTPMiddleware):
 
         method = request.method
         path = request.url.path
-headers = dict(request.headers)
-        # Redact sensitive headers
-        if "authorization" in headers:
-            headers["authorization"] = "***"
-        if "cookie" in headers:
-            headers["cookie"] = "***"
-        if "x-csrf-token" in headers:
-            headers["x-csrf-token"] = "***"
+        headers = dict(request.headers)
 
         log_request_start(method, path, request_id, headers)
 

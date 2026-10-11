@@ -38,7 +38,6 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
-    mfa_token: Optional[str] = None
 
 
 class InviteRequest(BaseModel):
@@ -53,7 +52,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
+async def register(request: Request, req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
     existing = await db["users"].find_one({"email": req.email})
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -125,7 +124,7 @@ async def register(req: RegisterRequest, db: AsyncIOMotorDatabase = Depends(get_
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-async def login(req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
+async def login(request: Request, req: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db), response: Response = None):
     user = await db["users"].find_one({"email": req.email, "is_active": True})
     if not user or not pwd.verify(req.password, user["hashed_password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -218,7 +217,7 @@ async def get_me(current_user: dict = Depends(get_current_tenant_user), db: Asyn
 
 @router.post("/invite")
 @limiter.limit("3/minute")
-async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin")), _= Depends(csrf_protect)):
+async def invite(request: Request, req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db), current_user: dict = Depends(require_role("Org Admin")), _= Depends(csrf_protect)):
     if req.role not in ["Operator"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot invite users with that role")
     org_id = current_user["org_id"]
@@ -244,62 +243,3 @@ async def invite(req: InviteRequest, db: AsyncIOMotorDatabase = Depends(get_db),
 
     await log_audit(db, org_id, current_user["user"]["_id"], "invite", "organization", org_id, {"invited": req.emails, "role": req.role})
     return {"invited": invited}
-
-
-import pyotp
-import qrcode
-import io
-from fastapi.responses import StreamingResponse
-
-class MFAVerifyRequest(BaseModel):
-    token: str
-
-@router.post("/mfa/setup", response_description="Setup MFA")
-async def setup_mfa(
-    request: Request,
-    current_user: dict = Depends(get_current_tenant_user),
-    db: AsyncIOMotorDatabase = Depends(get_db)
-):
-    if current_user.get("mfa_enabled"):
-        raise HTTPException(status_code=400, detail="MFA is already enabled")
-
-    secret = pyotp.random_base32()
-
-    # Store secret temporarily (in reality, store unverified secret in DB)
-    await db.users.update_one(
-        {"_id": current_user["_id"]},
-        {"$set": {"mfa_secret_pending": secret}}
-    )
-
-    totp = pyotp.TOTP(secret)
-    provisioning_uri = totp.provisioning_uri(name=current_user["email"], issuer_name="Greenlane")
-
-    return {"secret": secret, "provisioning_uri": provisioning_uri}
-
-@router.post("/mfa/verify", response_description="Verify MFA")
-@limiter.limit("5/minute")
-async def verify_mfa(
-    request: Request,
-    payload: MFAVerifyRequest,
-    current_user: dict = Depends(get_current_tenant_user),
-    db: AsyncIOMotorDatabase = Depends(get_db)
-):
-    user = await db.users.find_one({"_id": current_user["_id"]})
-
-    secret = user.get("mfa_secret") or user.get("mfa_secret_pending")
-    if not secret:
-        raise HTTPException(status_code=400, detail="MFA setup not initiated")
-
-    totp = pyotp.TOTP(secret)
-    if not totp.verify(payload.token):
-        raise HTTPException(status_code=401, detail="Invalid MFA token")
-
-    await db.users.update_one(
-        {"_id": current_user["_id"]},
-        {
-            "$set": {"mfa_enabled": True, "mfa_secret": secret},
-            "$unset": {"mfa_secret_pending": ""}
-        }
-    )
-
-    return {"message": "MFA enabled successfully"}
