@@ -46,7 +46,7 @@ class MapVesselResponse(BaseModel):
 @router.get("/dashboard/summary", response_model=FleetSummaryResponse)
 async def get_dashboard_summary(
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role(["Operator", "Fleet Manager", "Org Admin", "Compliance Officer"])),
+    current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin", "Compliance Officer")),
 ):
     """Returns fleet summary metrics for the current organization."""
     org_id = current_user["org_id"]
@@ -120,7 +120,7 @@ async def get_map_vessels(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     page_size: int = Query(100, ge=1, le=500, description="Items per page"),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role(["Operator", "Fleet Manager", "Org Admin", "Compliance Officer"])),
+    current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin", "Compliance Officer")),
 ):
     """Returns list of vessels with live AIS position mock data."""
     org_id = current_user["org_id"]

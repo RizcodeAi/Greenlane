@@ -142,3 +142,14 @@ export interface EmissionsAnalyticsData {
 export const getEmissionsAnalytics = () => {
   return axiosInstance.get<EmissionsAnalyticsData>('/emissions/analytics');
 };
+
+
+export const uploadBdnDocument = (shipId: string, file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return axiosInstance.post(`/emissions/upload-bdn?ship_id=${shipId}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+};

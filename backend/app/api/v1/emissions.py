@@ -12,6 +12,8 @@ from app.core.database import get_db, client as motor_client
 from app.core.security import verify_access_token
 from app.services.audit_log import log_audit
 from app.services.emissions_calculator import calculate_voyage_emissions
+from app.services.anomaly_detector import detect_anomalies
+from app.services.document_parser import AISimulatedParser
 from app.models.schemas import VoyageCreate, VoyageUpdate
 from app.api.v1.deps import get_current_tenant_user, require_role
 
@@ -465,7 +467,7 @@ def build_emissions_record(
 async def upload_voyages_csv(
     file: UploadFile = File(...),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role(["Operator", "Fleet Manager", "Org Admin"]))
+    current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin"))
 ):
     """
     Upload a CSV file containing voyage logs.
@@ -519,6 +521,12 @@ async def upload_voyages_csv(
                     "updated_at": now
                 }
 
+                # Check for Anomalies
+                is_anomalous, anomaly_reasons = detect_anomalies(voyage_doc, ship)
+                if is_anomalous:
+                    voyage_doc["is_anomalous"] = True
+                    voyage_doc["anomaly_reasons"] = anomaly_reasons
+
                 # Insert voyage
                 result = await db["voyages"].insert_one(voyage_doc)
                 voyage_id = result.inserted_id
@@ -558,7 +566,7 @@ async def upload_voyages_csv(
 @router.get("/analytics", response_model=dict)
 async def get_emissions_analytics(
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role(["Operator", "Fleet Manager", "Org Admin", "Compliance Officer"]))
+    current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin", "Compliance Officer"))
 ):
     """
     Get aggregated emissions data for charts.
@@ -611,3 +619,41 @@ async def get_emissions_analytics(
         "time_series": time_series,
         "fuel_breakdown": fuel_breakdown
     }
+
+
+@router.post("/upload-bdn", response_model=dict, status_code=status.HTTP_200_OK)
+async def upload_bunker_delivery_note(
+    ship_id: str,
+    file: UploadFile = File(...),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role("Operator", "Fleet Manager", "Org Admin"))
+):
+    """
+    Upload a Bunker Delivery Note (BDN) receipt (Image/PDF).
+    Uses AI/OCR to extract fuel data automatically.
+    """
+    allowed_types = ["image/jpeg", "image/png", "application/pdf"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a JPG, PNG, or PDF.")
+
+    org_id = current_user["org_id"]
+
+    # Verify ship belongs to org
+    ship = await db["ships"].find_one({"_id": ObjectId(ship_id), "org_id": org_id})
+    if not ship:
+        raise HTTPException(status_code=404, detail="Ship not found")
+
+    try:
+        contents = await file.read()
+
+        # Call the AI Parser
+        extracted_data = await AISimulatedParser.extract_fuel_data(file.filename, contents)
+
+        return {
+            "message": "AI Extraction successful",
+            "extracted_data": extracted_data,
+            "ship_name": ship.get("name")
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")

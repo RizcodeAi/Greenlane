@@ -23,6 +23,11 @@ export default function FleetMap() {
       .then((res) => setVessels(res.data))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+
+    const interval = setInterval(() => {
+      getLiveFleet().then((res) => setVessels(res.data)).catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
