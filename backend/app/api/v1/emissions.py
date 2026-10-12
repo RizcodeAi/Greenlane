@@ -3,7 +3,9 @@
 from datetime import datetime, timezone
 from typing import Optional
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
+import csv
+import io
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from app.core.database import get_db, client as motor_client
@@ -457,3 +459,155 @@ def build_emissions_record(
     }
 
 
+
+
+@router.post("/upload-csv", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def upload_voyages_csv(
+    file: UploadFile = File(...),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role(["Operator", "Fleet Manager", "Org Admin"]))
+):
+    """
+    Upload a CSV file containing voyage logs.
+    Expected CSV columns: ship_id, departure_port, arrival_port, departure_time, arrival_time, distance_nm, fuel_consumed_mt, fuel_type
+    """
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV.")
+
+    try:
+        contents = await file.read()
+        # Decode contents to string
+        decoded_contents = contents.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(decoded_contents))
+
+        org_id = current_user["org_id"]
+        inserted_count = 0
+        errors = []
+
+        now = datetime.now(timezone.utc)
+
+        for row_num, row in enumerate(csv_reader, start=2): # Row 1 is header
+            try:
+                ship_id_str = row.get("ship_id", "").strip()
+                if not ship_id_str:
+                    errors.append(f"Row {row_num}: Missing ship_id")
+                    continue
+
+                # Verify ship belongs to org
+                ship = await db["ships"].find_one({"_id": ObjectId(ship_id_str), "org_id": org_id})
+                if not ship:
+                    errors.append(f"Row {row_num}: Ship {ship_id_str} not found or access denied")
+                    continue
+
+                fuel_type = row.get("fuel_type", "").strip()
+                if fuel_type not in VALID_FUEL_TYPES:
+                    errors.append(f"Row {row_num}: Invalid fuel type '{fuel_type}'")
+                    continue
+
+                # Build voyage doc
+                voyage_doc = {
+                    "org_id": org_id,
+                    "ship_id": ObjectId(ship_id_str),
+                    "departure_port": row.get("departure_port", "").strip(),
+                    "arrival_port": row.get("arrival_port", "").strip(),
+                    "departure_time": datetime.fromisoformat(row.get("departure_time", "").strip()),
+                    "arrival_time": datetime.fromisoformat(row.get("arrival_time", "").strip()),
+                    "distance_nm": float(row.get("distance_nm", 0)),
+                    "fuel_consumed_mt": float(row.get("fuel_consumed_mt", 0)),
+                    "fuel_type": fuel_type,
+                    "created_at": now,
+                    "updated_at": now
+                }
+
+                # Insert voyage
+                result = await db["voyages"].insert_one(voyage_doc)
+                voyage_id = result.inserted_id
+
+                # Calculate emissions
+                calc_result = await calculate_voyage_emissions(
+                    db=db,
+                    voyage_id=str(voyage_id),
+                    ship_id=ship_id_str,
+                    fuel_type=fuel_type,
+                    fuel_consumed_mt=voyage_doc["fuel_consumed_mt"],
+                    distance_nm=voyage_doc["distance_nm"],
+                    org_id=org_id
+                )
+                inserted_count += 1
+
+            except Exception as row_err:
+                errors.append(f"Row {row_num}: Error processing data - {str(row_err)}")
+
+        # Log audit
+        await log_audit(
+            db, org_id, current_user["user"]["_id"],
+            "create", "voyage_csv_import", "bulk",
+            {"inserted_count": inserted_count, "errors": len(errors)}
+        )
+
+        return {
+            "message": f"Successfully processed {inserted_count} voyages.",
+            "inserted_count": inserted_count,
+            "errors": errors
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing CSV file: {str(e)}")
+
+
+@router.get("/analytics", response_model=dict)
+async def get_emissions_analytics(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role(["Operator", "Fleet Manager", "Org Admin", "Compliance Officer"]))
+):
+    """
+    Get aggregated emissions data for charts.
+    Returns:
+    - time_series: CO2 emissions aggregated by month
+    - fuel_breakdown: CO2 emissions aggregated by fuel type
+    """
+    org_id = current_user["org_id"]
+
+    # 1. Time series data (Monthly CO2)
+    pipeline_time = [
+        {"$match": {"org_id": org_id}},
+        {"$group": {
+            "_id": {
+                "year": {"$year": "$created_at"},
+                "month": {"$month": "$created_at"}
+            },
+            "co2": {"$sum": "$emissions.co2"}
+        }},
+        {"$sort": {"_id.year": 1, "_id.month": 1}}
+    ]
+    time_results = await db["emissions_computed"].aggregate(pipeline_time).to_list(length=100)
+
+    time_series = []
+    for r in time_results:
+        month_name = datetime(r["_id"]["year"], r["_id"]["month"], 1).strftime("%b %Y")
+        time_series.append({
+            "name": month_name,
+            "co2": round(r["co2"], 2)
+        })
+
+    # 2. Fuel breakdown data
+    pipeline_fuel = [
+        {"$match": {"org_id": org_id}},
+        {"$group": {
+            "_id": "$fuel_type",
+            "co2": {"$sum": "$emissions.co2"}
+        }}
+    ]
+    fuel_results = await db["emissions_computed"].aggregate(pipeline_fuel).to_list(length=100)
+
+    fuel_breakdown = []
+    for r in fuel_results:
+        fuel_breakdown.append({
+            "name": r["_id"],
+            "value": round(r["co2"], 2)
+        })
+
+    return {
+        "time_series": time_series,
+        "fuel_breakdown": fuel_breakdown
+    }
