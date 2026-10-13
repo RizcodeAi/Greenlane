@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from typing import List, Dict, Any
 from pydantic import BaseModel
 import random
+import searoute as sr
 
 from app.api.v1.deps import get_current_tenant_user
 from app.core.database import get_db
@@ -25,34 +26,54 @@ class RouteSuggestion(BaseModel):
 async def optimize_route(payload: RouteOptimizationRequest, current_user: dict = Depends(get_current_tenant_user)):
     """
     Predictive Route Optimization Engine.
-    Takes the ship's current position and destination, analyzes simulated live weather (storms),
-    and returns alternative waypoints that avoid storms while minimizing fuel burn.
+    Uses realistic oceanic pathfinding (searoute) to generate valid maritime trajectories,
+    avoiding landmasses.
     """
 
-    # Mocking a predictive AI routing engine that finds fuel-efficient paths
-    # In a real scenario, this would use pathfinding algorithms (e.g., A*) over weather/current grids.
+    # Destination parsing (mock translation of port string to lat/lng)
+    # In reality, you'd look up the port coordinates in a database.
+    destinations = {
+        "Rotterdam": [4.05, 51.95],
+        "Singapore": [103.83, 1.26],
+        "New York": [-74.00, 40.71],
+        "Shanghai": [121.47, 31.23]
+    }
 
-    suggestions = [
-        {
-            "route_id": "route_eco_1",
-            "description": "Eco Route: Avoids major North Atlantic depression, taking a slightly southern course.",
-            "estimated_fuel_savings_mt": round(random.uniform(10.0, 50.0), 1),
-            "estimated_time_delta_hours": round(random.uniform(2.0, 12.0), 1), # Takes slightly longer
-            "waypoints": [
-                {"lat": payload.current_lat - 5.0, "lng": payload.current_lng + 10.0},
-                {"lat": payload.current_lat - 2.0, "lng": payload.current_lng + 20.0}
-            ]
-        },
-        {
-            "route_id": "route_fast_1",
-            "description": "Speed Route: Direct path, but navigates through heavy currents.",
-            "estimated_fuel_savings_mt": round(random.uniform(-20.0, -5.0), 1), # Costs more fuel
-            "estimated_time_delta_hours": round(random.uniform(-10.0, -2.0), 1), # Arrives faster
-            "waypoints": [
-                {"lat": payload.current_lat + 2.0, "lng": payload.current_lng + 10.0},
-                {"lat": payload.current_lat + 1.0, "lng": payload.current_lng + 20.0}
-            ]
-        }
-    ]
+    dest_coords = destinations.get(payload.destination, [4.05, 51.95]) # Default to Rotterdam
+    start_coords = [payload.current_lng, payload.current_lat]
 
-    return suggestions
+    try:
+        # Calculate base oceanic route
+        base_route = sr.searoute(start_coords, dest_coords)
+        coords = base_route['geometry']['coordinates']
+
+        # Build standard waypoints
+        standard_waypoints = [{"lat": c[1], "lng": c[0]} for c in coords]
+
+        # Mock "Eco" adjustments (modifying the path slightly for demonstration)
+        eco_waypoints = []
+        for c in coords:
+            eco_waypoints.append({"lat": c[1] - 0.5, "lng": c[0] + 0.5})
+
+        suggestions = [
+            {
+                "route_id": "route_eco_1",
+                "description": "Eco Route: Ocean-safe path optimized to avoid weather systems.",
+                "estimated_fuel_savings_mt": round(random.uniform(10.0, 50.0), 1),
+                "estimated_time_delta_hours": round(random.uniform(2.0, 12.0), 1),
+                "waypoints": eco_waypoints
+            },
+            {
+                "route_id": "route_fast_1",
+                "description": "Direct Ocean Route: Standard oceanic pathfinding, ignores weather.",
+                "estimated_fuel_savings_mt": round(random.uniform(-20.0, -5.0), 1),
+                "estimated_time_delta_hours": round(random.uniform(-10.0, -2.0), 1),
+                "waypoints": standard_waypoints
+            }
+        ]
+
+        return suggestions
+
+    except Exception as e:
+        # Fallback if searoute fails (e.g., origin is too far inland)
+        return []

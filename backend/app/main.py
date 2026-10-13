@@ -25,6 +25,7 @@ from app.api.v1 import reports
 from app.api.v1 import weather
 from app.api.v1 import live_tracking
 from app.api.v1 import routing
+from app.api.v1 import agent
 from app.tasks.celery_app import celery_app
 
 
@@ -99,6 +100,7 @@ app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 app.include_router(weather.router, prefix="/api/v1/weather", tags=["Weather"])
 app.include_router(live_tracking.router, prefix="/api/v1/tracking", tags=["Live Tracking"])
 app.include_router(routing.router, prefix="/api/v1/routing", tags=["Route Optimization"])
+app.include_router(agent.router, prefix="/api/v1/agent", tags=["AI Agent"])
 
 
 @app.exception_handler(RequestValidationError)
