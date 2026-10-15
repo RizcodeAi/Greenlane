@@ -5,7 +5,7 @@ import { getVoyages, deleteVoyage, createVoyage, Voyage } from '../services/emis
 import AddVoyageModal from '../components/AddVoyageModal';
 
 export default function VoyageLogs() {
-  const { } = useAuth();
+  useAuth();
   const navigate = useNavigate();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [loading, setLoading] = useState(true);
