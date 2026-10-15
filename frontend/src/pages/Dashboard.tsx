@@ -3,22 +3,33 @@ import { useAuth } from '../store/auth';
 import { getDashboardSummary } from '../services/dashboard';
 import { FleetSummary } from '../services/dashboard';
 import FleetMap from '../components/FleetMap';
-import { getMapVessels } from '../services/dashboard';
-import { MapVessel } from '../services/dashboard';
+import { getLiveFleet, LiveVessel } from '../services/tracking';
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
   const [summary, setSummary] = useState<FleetSummary | null>(null);
-  const [vessels, setVessels] = useState<MapVessel[]>([]);
+  const [vessels, setVessels] = useState<LiveVessel[]>([]);
   const [, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     Promise.all([
       getDashboardSummary().then((r) => setSummary(r.data)).catch(console.error),
-      getMapVessels().then((r) => setVessels(r.data)).catch(console.error),
+
     ]).finally(() => setLoading(false));
   }, [isAuthenticated]);
+
+  // Poll for live vessel updates for the sidebar feed
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    getLiveFleet().then((r) => setVessels(r.data)).catch(console.error);
+    const interval = setInterval(() => {
+      getLiveFleet().then((r) => setVessels(r.data)).catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
 
   if (!isAuthenticated) {
     return (
@@ -98,7 +109,7 @@ export default function Dashboard() {
                 }}></span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-navy-100 truncate">{vessel.name}</p>
-                  <p className="text-[10px] text-slate-500">{vessel.destination} &middot; {vessel.speed_knots} kts</p>
+                  <p className="text-[10px] text-slate-500">Heading: {vessel.heading.toFixed(0)}&deg; &middot; {vessel.speed.toFixed(1)} kts</p>
                 </div>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                   vessel.compliance_status === 'Compliant' ? 'bg-green-900/60 text-green-300'

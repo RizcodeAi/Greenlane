@@ -121,3 +121,35 @@ export const getEmissionsSummaryData = async (params?: {
   const { data } = await axiosInstance.get<EmissionsSummary>('/emissions/summary', { params });
   return data;
 };
+
+
+export const uploadVoyagesCsv = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return axiosInstance.post('/emissions/upload-csv', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+};
+
+
+export interface EmissionsAnalyticsData {
+  time_series: { name: string; co2: number }[];
+  fuel_breakdown: { name: string; value: number }[];
+}
+
+export const getEmissionsAnalytics = () => {
+  return axiosInstance.get<EmissionsAnalyticsData>('/emissions/analytics');
+};
+
+
+export const uploadBdnDocument = (shipId: string, file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return axiosInstance.post(`/emissions/upload-bdn?ship_id=${shipId}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+};

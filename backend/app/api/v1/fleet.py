@@ -239,3 +239,12 @@ async def delete_ship(
     )
 
     return {"message": "Ship soft deleted successfully"}
+
+@router.post("/sync-ais", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_ais_sync(current_user: dict = Depends(require_role("Fleet Manager", "Org Admin"))):
+    """
+    Trigger a background task to synchronize live AIS data for the fleet.
+    """
+    from app.tasks.ais_sync import sync_live_ais_data
+    sync_live_ais_data.delay()
+    return {"message": "AIS synchronization started"}

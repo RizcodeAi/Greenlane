@@ -9,6 +9,7 @@ import VoyageLogs from './pages/VoyageLogs';
 import EmissionsAnalytics from './pages/EmissionsAnalytics';
 import Reports from './pages/Reports';
 import Navbar from './components/Navbar';
+import AgentWidget from './components/AgentWidget';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -50,6 +51,7 @@ function AppContent() {
           </Routes>
         </main>
       </div>
+      {isAuthenticated && <AgentWidget />}
     </div>
   );
 }
