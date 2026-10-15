@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import os
+import logging
 
 from app.api.v1.deps import get_current_tenant_user
 from app.core.database import get_db
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,8 +28,8 @@ async def chat_with_agent(
 ):
     """
     Maritime AI Agent Endpoint.
-    Integrates with LangChain structure / DB queries to provide intelligent responses
-    about fleet compliance, emissions aggregation, fuel breakdown, and eco-routes.
+    Integrates with LangChain and ChatOpenAI when OPENAI_API_KEY is present,
+    falling back to database aggregation tools and rule-based query resolution.
     """
     query = payload.message.lower()
     org_id = current_user["org_id"]
@@ -35,14 +38,37 @@ async def chat_with_agent(
     actions = []
     response_data = {}
 
+    # Attempt LangChain chain execution if OpenAI API key is configured
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key and len(openai_key) > 10:
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.prompts import ChatPromptTemplate
+
+            llm = ChatOpenAI(temperature=0, openai_api_key=openai_key, model="gpt-3.5-turbo")
+            prompt = ChatPromptTemplate.from_template(
+                "You are an expert Maritime AI Agent for Greenlane SaaS. Answer the query concisely: {user_query}"
+            )
+            chain = prompt | llm
+            llm_res = await chain.ainvoke({"user_query": payload.message})
+            reply = llm_res.content
+            actions.append("langchain_llm_invoked")
+            return {
+                "reply": reply,
+                "actions_taken": actions,
+                "data": response_data
+            }
+        except Exception as llm_err:
+            logger.warning(f"LangChain execution fallback: {llm_err}")
+
+    # Fallback to Maritime Analytics DB Tools
     if "non-compliant" in query or "compliance" in query or "red" in query or "status" in query:
         ships = await db["ships"].find({"org_id": org_id, "status": "inactive"}).to_list(10)
         if not ships:
-            # Also check for is_anomalous or Non-Compliant status flag
             ships = await db["ships"].find({"org_id": org_id, "compliance_status": "Non-Compliant"}).to_list(10)
 
         if ships:
-            ship_names = ", ".join([s.get("name", "Unknown") for s in ships])
+            ship_names = ", ".join([s.get("name", "Unknown") or "Unknown" for s in ships])
             reply = f"I found {len(ships)} non-compliant/inactive vessel(s) in your fleet: {ship_names}. Would you like me to generate an anomaly report for them?"
             actions.append("queried_non_compliant_ships")
             response_data["non_compliant_ships"] = [s.get("name") for s in ships]
