@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
-import { getVoyages, deleteVoyage, createVoyage, Voyage } from '../services/emissions';
+import { getVoyages, deleteVoyage, createVoyage, uploadVoyagesCsv, Voyage } from '../services/emissions';
+import { useRef } from 'react';
 import AddVoyageModal from '../components/AddVoyageModal';
 
 export default function VoyageLogs() {
@@ -17,6 +18,8 @@ export default function VoyageLogs() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchVoyages = async () => {
     setLoading(true);
@@ -50,6 +53,25 @@ export default function VoyageLogs() {
     }
   };
 
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const res = await uploadVoyagesCsv(file);
+      alert(`Successfully processed ${res.data.inserted_count} voyages.\nErrors: ${res.data.errors.length}`);
+      setPage(1);
+      fetchVoyages();
+    } catch (err: any) {
+      alert(`Upload failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this voyage?')) return;
     setDeletingId(id);
@@ -74,10 +96,33 @@ export default function VoyageLogs() {
           <h1 className="text-3xl font-bold text-navy-50">Voyage Logs</h1>
           <p className="text-slate-400 mt-1">Track and manage fleet voyages</p>
         </div>
-        <button onClick={() => setModalOpen(true)}
+
+        <div className="flex gap-3">
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="px-4 py-2 bg-navy-800 text-white border border-navy-700 rounded-lg hover:bg-navy-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+            >
+              {uploading ? (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              )}
+              Import CSV
+            </button>
+            <button onClick={() => setModalOpen(true)}
           className="bg-green-600 hover:bg-green-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors flex items-center gap-2">
           <span>+</span> Log Voyage
         </button>
+        </div>
+
       </div>
 
       {/* Filters */}

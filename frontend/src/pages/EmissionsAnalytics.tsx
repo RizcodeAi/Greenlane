@@ -1,141 +1,104 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../store/auth';
-import { getEmissionsSummaryData, EmissionsSummary } from '../services/emissions';
+import { getEmissionsAnalytics, EmissionsAnalyticsData } from '../services/emissions';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
+} from 'recharts';
+
+const COLORS = ['#16A34A', '#EAB308', '#EF4444', '#3B82F6', '#8B5CF6'];
 
 export default function EmissionsAnalytics() {
   const { isAuthenticated } = useAuth();
-  const [summary, setSummary] = useState<EmissionsSummary | null>(null);
+  const [data, setData] = useState<EmissionsAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('month');
-  const [groupBy, setGroupBy] = useState('vessel');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    getEmissionsSummaryData({ period, group_by: groupBy })
-      .then((r) => setSummary(r))
-      .catch(console.error)
+    getEmissionsAnalytics()
+      .then((res) => setData(res.data))
+      .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [isAuthenticated, period, groupBy]);
+  }, [isAuthenticated]);
 
-  if (!isAuthenticated) {
-    return <div className="p-8"><a href="/login" className="text-green-400 underline">Login required</a></div>;
-  }
+  if (loading) return <div className="p-8 text-slate-400 text-center">Loading analytics...</div>;
+  if (error) return <div className="p-8 text-red-400 text-center">Error: {error}</div>;
+  if (!data) return <div className="p-8 text-slate-400 text-center">No data available</div>;
 
-  const fuelTypes = ['HFO', 'MGO', 'LNG', 'Methanol'];
-  const fuelColors: Record<string, string> = { HFO: '#F97316', MGO: '#3B82F6', LNG: '#06B6D4', Methanol: '#A855F7' };
-  const pollutantColors: Record<string, string> = { co2: '#22C55E', ch4: '#F59E0B', n2o: '#EF4444', sox: '#8B5CF6', nox: '#3B82F6' };
-  const pollutantLabels: Record<string, string> = { co2: 'CO2', ch4: 'CH4', n2o: 'N2O', sox: 'SOx', nox: 'NOx' };
-
-  const maxFuel = Math.max(...Object.values(summary?.by_fuel_type || {}).map((v: any) => v.co2e), 1);
-  
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-navy-50">Emissions Analytics</h1>
-          <p className="text-slate-400 mt-1">Fleet emissions overview and breakdowns</p>
-        </div>
-        <div className="flex gap-2">
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}
-            className="bg-navy-800 border border-navy-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500">
-            <option value="month">Month</option>
-            <option value="quarter">Quarter</option>
-            <option value="year">Year</option>
-          </select>
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}
-            className="bg-navy-800 border border-navy-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500">
-            <option value="vessel">Group by Vessel</option>
-            <option value="fuel_type">Group by Fuel Type</option>
-          </select>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-navy-50">Emissions Analytics</h1>
+        <p className="text-slate-400 mt-1">Visualize fleet CO2 output and fuel breakdown</p>
       </div>
 
-      {loading ? (
-        <div className="text-slate-400 text-center py-12">Loading emissions data...</div>
-      ) : (
-        <>
-          {/* Summary stat cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-navy-900 border border-navy-800 rounded-lg p-4">
-              <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Total CO2</p>
-              <p className="text-2xl font-bold text-green-400">{summary?.total_co2?.toFixed(1) || 0} t</p>
-            </div>
-            <div className="bg-navy-900 border border-navy-800 rounded-lg p-4">
-              <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Total CO2e</p>
-              <p className="text-2xl font-bold text-navy-50">{summary?.total_co2e?.toFixed(1) || 0} t</p>
-            </div>
-            <div className="bg-navy-900 border border-navy-800 rounded-lg p-4">
-              <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Total Fuel</p>
-              <p className="text-2xl font-bold text-navy-50">{summary?.total_fuel_mt?.toFixed(1) || 0} MT</p>
-            </div>
-            <div className="bg-navy-900 border border-navy-800 rounded-lg p-4">
-              <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Avg EEOI</p>
-              <p className="text-2xl font-bold text-navy-50">{summary?.avg_eefi?.toFixed(2) || 'N/A'}</p>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* Fuel breakdown */}
-          <div className="bg-navy-900 border border-navy-800 rounded-lg p-6">
-            <h2 className="text-lg font-bold text-navy-50 mb-4">Fuel Type Breakdown</h2>
-            <div className="space-y-3">
-              {fuelTypes.map((ft) => {
-                const data = summary?.by_fuel_type?.[ft];
-                const co2e = data?.co2e || 0;
-                const pct = maxFuel > 0 ? (co2e / maxFuel) * 100 : 0;
-                return (
-                  <div key={ft} className="flex items-center gap-3">
-                    <div className="w-24 text-sm text-slate-400">{ft}</div>
-                    <div className="flex-1 bg-navy-800 rounded-full h-6 overflow-hidden relative">
-                      <div className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%`, backgroundColor: fuelColors[ft] }} />
-                    </div>
-                    <div className="w-28 text-right text-sm">
-                      <span className="text-navy-100 font-medium">{co2e.toFixed(2)} t</span>
-                      <span className="text-slate-500 ml-2">CO2e</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        {/* Main Area Chart */}
+        <div className="lg:col-span-2 bg-navy-900 border border-navy-800 rounded-lg p-6">
+          <h3 className="text-lg font-bold text-navy-50 mb-6">CO2 Emissions Over Time (mt)</h3>
+          <div className="h-[400px] w-full">
+            {data.time_series.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data.time_series} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorCo2" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#16A34A" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#16A34A" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="name" stroke="#64748B" tick={{fill: '#94A3B8'}} />
+                  <YAxis stroke="#64748B" tick={{fill: '#94A3B8'}} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0F172A', borderColor: '#1E293B', color: '#F8FAFC' }}
+                    itemStyle={{ color: '#4ADE80' }}
+                  />
+                  <Area type="monotone" dataKey="co2" stroke="#16A34A" fillOpacity={1} fill="url(#colorCo2)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500">Not enough data to render chart</div>
+            )}
           </div>
+        </div>
 
-          {/* Pollutants breakdown */}
-          <div className="bg-navy-900 border border-navy-800 rounded-lg p-6">
-            <h2 className="text-lg font-bold text-navy-50 mb-4">Pollutant Breakdown</h2>
-            <div className="grid grid-cols-5 gap-3">
-              {Object.entries(summary?.by_pollutant || {}).map(([key, value]) => (
-                <div key={key} className="bg-navy-800 rounded-lg p-4 text-center">
-                  <p className="text-xs text-slate-500 uppercase mb-1">{pollutantLabels[key as string] || key}</p>
-                  <p className="text-2xl font-bold" style={{ color: pollutantColors[key as string] || '#fff' }}>
-                    {(value as number).toFixed(2)}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">tonnes</p>
-                </div>
-              ))}
-            </div>
+        {/* Pie Chart */}
+        <div className="bg-navy-900 border border-navy-800 rounded-lg p-6 flex flex-col">
+          <h3 className="text-lg font-bold text-navy-50 mb-6">CO2 by Fuel Type</h3>
+          <div className="h-[400px] w-full flex-1">
+            {data.fuel_breakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data.fuel_breakdown}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={120}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {data.fuel_breakdown.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0F172A', borderColor: '#1E293B', color: '#F8FAFC', borderRadius: '8px' }}
+                    itemStyle={{ color: '#F8FAFC' }}
+                  />
+                  <Legend verticalAlign="bottom" height={36} wrapperStyle={{ color: '#94A3B8' }}/>
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500">Not enough data to render chart</div>
+            )}
           </div>
+        </div>
 
-          {/* Vessel breakdown (if grouped by vessel) */}
-          {groupBy === 'vessel' && summary?.by_vessel && Object.keys(summary.by_vessel).length > 0 && (
-            <div className="bg-navy-900 border border-navy-800 rounded-lg p-6">
-              <h2 className="text-lg font-bold text-navy-50 mb-4">Per-Vessel Breakdown</h2>
-              <div className="space-y-3">
-                {Object.entries(summary.by_vessel).map(([vesselId, data]: [string, any]) => (
-                  <div key={vesselId} className="flex items-center gap-3">
-                    <div className="w-32 text-sm text-slate-400 truncate">{vesselId}</div>
-                    <div className="flex-1 bg-navy-800 rounded-full h-6 overflow-hidden">
-                      <div className="h-full rounded-full bg-green-600 transition-all duration-500"
-                        style={{ width: `${maxFuel > 0 ? (data.co2e / maxFuel) * 100 : 0}%` }} />
-                    </div>
-                    <div className="w-28 text-right text-sm text-navy-100">{data.co2e.toFixed(2)} t CO2e</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
+      </div>
     </div>
   );
 }

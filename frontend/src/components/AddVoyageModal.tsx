@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { uploadBdnDocument } from '../services/emissions';
 
 interface VoyageFormData {
   asset_id: string;
@@ -22,6 +23,45 @@ interface Props {
 const VALID_FUEL_TYPES = ['HFO', 'MGO', 'LNG', 'Methanol'];
 
 export default function AddVoyageModal({ isOpen, onClose, onSubmit, loading }: Props) {
+
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAiScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!form.asset_id) {
+      alert("Please enter an Asset/Ship ID first before scanning a receipt.");
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setAiLoading(true);
+    try {
+      const res = await uploadBdnDocument(form.asset_id, file);
+      const data = res.data.extracted_data;
+
+      // Auto-fill the form with AI extracted data
+      setForm(prev => ({
+        ...prev,
+        fuel_type: data.fuel_type,
+        fuel_consumed_mt: data.fuel_consumed_mt.toString(),
+        departure_port: data.departure_port,
+        arrival_port: data.arrival_port,
+        distance_nm: data.distance_nm.toString(),
+      }));
+      setAiConfidence(data.confidence_score);
+
+    } catch (err: any) {
+      alert(`AI Scan failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setAiLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const [form, setForm] = useState<VoyageFormData>({
     asset_id: '',
     departure_port: '',
@@ -87,6 +127,35 @@ export default function AddVoyageModal({ isOpen, onClose, onSubmit, loading }: P
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* AI Scanner Section */}
+          <div className="bg-indigo-900/30 border border-indigo-700/50 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-indigo-300 font-medium text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  Smart OCR Scanner
+                </h4>
+                <p className="text-slate-400 text-xs mt-1">Upload a fuel receipt (BDN) to auto-fill details.</p>
+              </div>
+              <input type="file" accept="image/*,.pdf" className="hidden" ref={fileInputRef} onChange={handleAiScan} />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={aiLoading}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
+              >
+                {aiLoading ? "Scanning..." : "Scan Receipt"}
+              </button>
+            </div>
+            {aiConfidence !== null && (
+              <div className="mt-3 text-xs text-green-400 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                Extraction complete (Confidence: {(aiConfidence * 100).toFixed(0)}%)
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm text-slate-400 mb-1">Asset/Asset ID *</label>
             <input type="text" value={form.asset_id} onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
