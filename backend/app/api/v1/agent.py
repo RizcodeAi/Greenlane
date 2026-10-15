@@ -66,10 +66,10 @@ async def chat_with_agent(
         pipeline = [{"$match": {"org_id": org_id}}, {"$group": {"_id": "$fuel_type", "total": {"$sum": "$emissions.co2"}}}]
         res = await db["emissions_computed"].aggregate(pipeline).to_list(10)
         if res:
-            breakdown_str = ", ".join([f"{item['_id'] or 'Other'}: {round(item['total'], 1)} mt CO2" for item in res])
+            breakdown_str = ", ".join([f"{item.get('_id') or 'Other'}: {round(item.get('total', 0), 1)} mt CO2" for item in res])
             reply = f"Here is your fleet's CO2 breakdown by fuel type: {breakdown_str}."
             actions.append("queried_fuel_breakdown")
-            response_data["fuel_breakdown"] = {item['_id']: round(item['total'], 1) for item in res}
+            response_data["fuel_breakdown"] = {(item.get('_id') or 'Other'): round(item.get('total', 0), 1) for item in res}
         else:
             reply = "No fuel breakdown data is currently available."
 

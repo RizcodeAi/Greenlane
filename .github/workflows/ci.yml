@@ -132,7 +132,7 @@ jobs:
       - name: Run npm audit
         run: |
           cd frontend
-          npm audit --audit-level=critical || true
+          npm audit --audit-level=high
 
   # ============================================================
   # Docker Build
