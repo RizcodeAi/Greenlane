@@ -1,5 +1,7 @@
 """Prometheus metrics infrastructure for GreenLane Maritime backend."""
 
+from __future__ import annotations
+
 import time
 
 from prometheus_client import (

@@ -12,7 +12,7 @@ export const useAuth = create<AuthState>()((set) => ({
   },
 
   logout: async () => {
-    try { await apiLogout(); } catch {}
+    try { await apiLogout(); } catch { /* ignore logout errors */ }
     set({ user: null, organization: null, isAuthenticated: false });
   },
 
@@ -20,7 +20,9 @@ export const useAuth = create<AuthState>()((set) => ({
     try {
       const res = await getMe();
       set({ user: res.data.user, organization: res.data.organization, isAuthenticated: true });
-    } catch { set({ isAuthenticated: false }); }
+    } catch {
+      set({ isAuthenticated: false });
+    }
   },
 
   refreshSession: async () => {
