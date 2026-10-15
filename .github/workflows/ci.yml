@@ -113,7 +113,7 @@ jobs:
       - name: Unit tests
         run: |
           cd frontend
-          npm run test -- --coverage --reporters=default --reporters=jest-junit
+          npm run test -- --coverage --reporter=default --reporter=jest-junit
 
   # ============================================================
   # Security Scan
